@@ -1,0 +1,44 @@
+[
+  {
+    "kind": [
+      "shadowsocks",
+      "tcp",
+      "none",
+      "single"
+    ],
+    "success": false,
+    "http": "000",
+    "curlExit": 28,
+    "coreExit": null,
+    "failureCategory": "timeout",
+    "ms": 9031
+  },
+  {
+    "kind": [
+      "vless",
+      "grpc",
+      "tls",
+      "balancer"
+    ],
+    "success": false,
+    "http": "000",
+    "curlExit": 35,
+    "coreExit": null,
+    "failureCategory": "TLS-or-proxy-error",
+    "ms": 47
+  },
+  {
+    "kind": [
+      "vless",
+      "ws",
+      "tls",
+      "balancer"
+    ],
+    "success": true,
+    "http": "204",
+    "curlExit": 0,
+    "coreExit": null,
+    "failureCategory": "none",
+    "ms": 687
+  }
+]

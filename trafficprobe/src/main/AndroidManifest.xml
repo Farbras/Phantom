@@ -1,0 +1,1 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"><uses-permission android:name="android.permission.INTERNET" /><application android:label="Phantom Traffic Test" android:testOnly="true" android:allowBackup="false"><activity android:name=".TrafficActivity" android:exported="true" /></application></manifest>

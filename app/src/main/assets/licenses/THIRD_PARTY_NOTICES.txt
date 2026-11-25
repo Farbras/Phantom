@@ -1,0 +1,36 @@
+Phantom — third-party components
+
+Xray-core 26.11.9 — Mozilla Public License 2.0
+https://github.com/XTLS/Xray-core/tree/v26.11.9
+
+libXray 26.11.9 — MIT
+https://github.com/XTLS/libXray/tree/v26.11.9
+
+hev-socks5-tunnel 2.19.3 — MIT
+https://github.com/heiher/hev-socks5-tunnel/tree/2.19.3
+Bundled HEV third-part notices are included separately (lwIP, YAML, task system).
+Wintun notice is preserved from the source archive; Wintun is not loaded on Android.
+
+Go standard library/runtime — BSD 3-Clause, Go Authors
+https://go.dev/LICENSE
+Go module versions are in native-sources/libxray-go.mod in the source project.
+
+Kotlin 2.2.21 — Apache License 2.0, JetBrains
+https://github.com/JetBrains/kotlin
+Kotlin coroutines 1.10.2 — Apache License 2.0
+https://github.com/Kotlin/kotlinx.coroutines
+AndroidX / Jetpack Compose / WorkManager — Apache License 2.0, Android Open Source Project
+https://android.googlesource.com/platform/frameworks/support/
+OkHttp 4.12.0 / Okio — Apache License 2.0, Square
+https://github.com/square/okhttp/tree/parent-4.12.0
+ZXing Android Embedded 4.3.0 — Apache License 2.0, JourneyApps
+https://github.com/journeyapps/zxing-android-embedded/tree/v4.3.0
+ZXing core 3.4.1 — Apache License 2.0, ZXing authors
+https://github.com/zxing/zxing
+
+GeoIP/GeoSite data distributed with Xray release 26.11.9:
+XTLS/Xray-rules-dat — GNU GPL v3; preserved license is Xray-rules-dat.txt.
+https://github.com/XTLS/Xray-rules-dat
+
+No Happ source code, artwork or proprietary decryption technology is embedded.
+Phantom adaptive mask artwork is an original code-native vector in res/drawable/mask.xml.

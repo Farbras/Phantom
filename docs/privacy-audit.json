@@ -1,0 +1,16 @@
+{
+  "sourceFiles": 221,
+  "privateValuesCompared": 9,
+  "matches": 0,
+  "privateInputBundled": false,
+  "sourceWhitelist": [
+    "app/src",
+    "app/libs",
+    "trafficprobe/src",
+    "docs",
+    "native-sources",
+    "scripts",
+    "gradle"
+  ],
+  "note": "Checks local fixture identifiers/passwords/keys and the optional URL against source files and decompressed APK entries."
+}

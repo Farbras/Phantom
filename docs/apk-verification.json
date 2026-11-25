@@ -1,0 +1,35 @@
+{
+  "package": "app.phantom",
+  "version": "1.0.0",
+  "minSdk": 29,
+  "targetSdk": 36,
+  "abi": "arm64-v8a",
+  "signatureSchemeV2": true,
+  "zipalign16k": true,
+  "elf": [
+    {
+      "library": "lib/arm64-v8a/libandroidx.graphics.path.so",
+      "loadAlignment": [
+        16384,
+        16384,
+        16384
+      ]
+    },
+    {
+      "library": "lib/arm64-v8a/libgojni.so",
+      "loadAlignment": [
+        16384,
+        16384,
+        16384
+      ]
+    },
+    {
+      "library": "lib/arm64-v8a/libhev-socks5-tunnel.so",
+      "loadAlignment": [
+        16384,
+        16384,
+        16384
+      ]
+    }
+  ]
+}

@@ -1,0 +1,184 @@
+[
+  {
+    "kind": [
+      "vless",
+      "tcp",
+      "reality",
+      "balancer"
+    ],
+    "success": true,
+    "http": "204",
+    "curlExit": 0,
+    "coreExit": null,
+    "tlsError": "other",
+    "ms": 1109
+  },
+  {
+    "kind": [
+      "trojan",
+      "tcp",
+      "tls",
+      "balancer"
+    ],
+    "success": true,
+    "http": "204",
+    "curlExit": 0,
+    "coreExit": null,
+    "tlsError": "other",
+    "ms": 3125
+  },
+  {
+    "kind": [
+      "shadowsocks",
+      "tcp",
+      "none",
+      "single"
+    ],
+    "success": false,
+    "http": "000",
+    "curlExit": 28,
+    "coreExit": null,
+    "tlsError": "other",
+    "ms": 9031
+  },
+  {
+    "kind": [
+      "vless",
+      "ws",
+      "tls",
+      "single"
+    ],
+    "success": true,
+    "http": "204",
+    "curlExit": 0,
+    "coreExit": null,
+    "tlsError": "other",
+    "ms": 1734
+  },
+  {
+    "kind": [
+      "vless",
+      "xhttp",
+      "reality",
+      "single"
+    ],
+    "success": true,
+    "http": "204",
+    "curlExit": 0,
+    "coreExit": null,
+    "tlsError": "other",
+    "ms": 1969
+  },
+  {
+    "kind": [
+      "trojan",
+      "tcp",
+      "tls",
+      "single"
+    ],
+    "success": true,
+    "http": "204",
+    "curlExit": 0,
+    "coreExit": null,
+    "tlsError": "other",
+    "ms": 672
+  },
+  {
+    "kind": [
+      "hysteria",
+      "hysteria",
+      "tls",
+      "single"
+    ],
+    "success": true,
+    "http": "204",
+    "curlExit": 0,
+    "coreExit": null,
+    "tlsError": "other",
+    "ms": 687
+  },
+  {
+    "kind": [
+      "vless",
+      "xhttp",
+      "tls",
+      "single"
+    ],
+    "success": true,
+    "http": "204",
+    "curlExit": 0,
+    "coreExit": null,
+    "tlsError": "other",
+    "ms": 875
+  },
+  {
+    "kind": [
+      "vless",
+      "grpc",
+      "tls",
+      "single"
+    ],
+    "success": true,
+    "http": "204",
+    "curlExit": 0,
+    "coreExit": null,
+    "tlsError": "other",
+    "ms": 1860
+  },
+  {
+    "kind": [
+      "vless",
+      "grpc",
+      "tls",
+      "balancer"
+    ],
+    "success": false,
+    "http": "000",
+    "curlExit": 35,
+    "coreExit": null,
+    "tlsError": "other",
+    "ms": 15
+  },
+  {
+    "kind": [
+      "vless",
+      "ws",
+      "tls",
+      "balancer"
+    ],
+    "success": false,
+    "http": "000",
+    "curlExit": 35,
+    "coreExit": null,
+    "tlsError": "other",
+    "ms": 16
+  },
+  {
+    "kind": [
+      "vless",
+      "grpc",
+      "reality",
+      "single"
+    ],
+    "success": true,
+    "http": "204",
+    "curlExit": 0,
+    "coreExit": null,
+    "tlsError": "other",
+    "ms": 782
+  },
+  {
+    "kind": [
+      "vless",
+      "tcp",
+      "reality",
+      "single"
+    ],
+    "success": true,
+    "http": "204",
+    "curlExit": 0,
+    "coreExit": null,
+    "tlsError": "other",
+    "ms": 1547
+  }
+]

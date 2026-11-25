@@ -1,0 +1,5 @@
+# Copy to signing.local.properties (excluded from Git) and use your own values.
+storeFile=.tools/phantom-signing.p12
+storePassword=YOUR_PRIVATE_PASSWORD
+keyAlias=phantom
+keyPassword=YOUR_PRIVATE_PASSWORD
