@@ -4,6 +4,7 @@ import app.phantom.core.ConfigBuilder
 import app.phantom.core.Importer
 import app.phantom.core.ProbeEndpoint
 import app.phantom.core.RoutingImport
+import app.phantom.core.XrayLoopback
 import app.phantom.data.*
 import org.json.JSONArray
 import org.json.JSONObject
@@ -40,6 +41,22 @@ class ConfigurationTest {
         assertEquals("9.9.9.9",built.getJSONObject("dns").getJSONArray("servers").getString(0))
         assertEquals("auto",built.getJSONObject("routing").getJSONArray("balancers").getJSONObject(0).getString("tag"))
         assertEquals("socks",built.getJSONArray("outbounds").getJSONObject(0).getString("protocol"))
+    }
+    @Test fun directTunnelUsesOnlyTheRuntimeDescriptorAndRestrictsMetricsToThePrivateSocksInbound() {
+        val profile = JSONObject(server().config).put("env", JSONObject().put("xray.tun.fd", "99"))
+        val built = JSONObject(ConfigBuilder.buildTunnel(server().copy(config = profile.toString()), Catalog(), "assets", 41, XrayLoopback()))
+        assertEquals("41", built.getJSONObject("env").getString("xray.tun.fd"))
+        val inbounds = built.getJSONArray("inbounds").objects()
+        val tun = inbounds.single { it.getString("protocol") == "tun" }
+        assertEquals(ConfigBuilder.TUN_TAG, tun.getString("tag"))
+        val socks = inbounds.single { it.getString("tag") == "socks" }
+        assertEquals("password", socks.getJSONObject("settings").getString("auth"))
+        assertEquals("127.0.0.1", socks.getString("listen"))
+        val metrics = built.getJSONObject("metrics")
+        assertFalse(metrics.has("listen"))
+        val route = built.getJSONObject("routing").getJSONArray("rules").getJSONObject(0)
+        assertEquals(listOf("socks"), route.getJSONArray("inboundTag").strings())
+        assertEquals(metrics.getString("tag"), route.getString("outboundTag"))
     }
     @Test fun customRoutesPrecedeProviderRules() {
         val c=Catalog(routeProfiles=mapOf("default" to """[{"action":"Block","domain":["full:blocked.example"]}]"""))

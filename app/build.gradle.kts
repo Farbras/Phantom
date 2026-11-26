@@ -17,8 +17,8 @@ android {
         applicationId = "app.phantom"
         minSdk = 29
         targetSdk = 36
-        versionCode = 3
-        versionName = "1.0.2"
+        versionCode = 8
+        versionName = "1.0.7"
         ndk { abiFilters += providers.gradleProperty("phantomAbi").orNull?.split(",") ?: listOf("arm64-v8a", "x86_64") }
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -35,11 +35,16 @@ android {
             keyPassword=localSigning.getProperty("keyPassword")
         }
     }
-    buildTypes { release { isMinifyEnabled = false;if(localSigning.isNotEmpty()) signingConfig=signingConfigs.getByName("personal") } }
+    buildTypes {
+        debug {
+            if (providers.gradleProperty("phantomSideBySide").orNull == "true") applicationIdSuffix = ".verification"
+        }
+        release { isMinifyEnabled = false;if(localSigning.isNotEmpty()) signingConfig=signingConfigs.getByName("personal") }
+    }
 }
 dependencyLocking { lockAllConfigurations() }
 dependencies {
-    implementation(files("libs/libXray.aar", "libs/hev-socks5-tunnel.aar"))
+    implementation(files("libs/libXray.aar"))
     implementation(platform("androidx.compose:compose-bom:2025.10.01"))
     implementation("androidx.activity:activity-compose:1.11.0")
     implementation("androidx.compose.material3:material3")

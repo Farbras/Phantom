@@ -97,7 +97,7 @@ fun PhantomRoot(app: PhantomApp,incoming: String?,consumeIncoming: ()->Unit,exte
             finally { busy="" }
         }
     }
-    val prober = remember { Prober(app.vault, app) }
+    val prober = app.prober
     val checking by prober.checking.collectAsStateWithLifecycle()
     val servers = remember(catalog.subscriptions) { catalog.subscriptions.flatMap { it.servers } }
     fun checkPing(targets: List<Server>) {

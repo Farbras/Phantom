@@ -1,9 +1,11 @@
 package app.phantom.core
 
+import android.app.ActivityManager
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import app.phantom.data.Catalog
 import app.phantom.data.Server
 import app.phantom.data.Vault
@@ -14,17 +16,29 @@ import app.phantom.vpn.Phase
 import app.phantom.vpn.VpnRuntime
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
+import okhttp3.Call
+import okhttp3.Connection
 import okhttp3.ConnectionPool
+import okhttp3.EventListener
 import okhttp3.OkHttpClient
+import okhttp3.Protocol
 import okhttp3.Request
 import org.json.JSONObject
 import java.io.IOException
@@ -61,59 +75,127 @@ internal fun ConnectivityManager.probeNetwork(): Network? {
 class Prober(private val vault: Vault, private val context: Context) {
     private val batch = Mutex()
     private val pending = MutableStateFlow<Set<String>>(emptySet())
+    private val connectivity by lazy { context.getSystemService(ConnectivityManager::class.java) }
+    private val probeWorkers by lazy {
+        if (context.getSystemService(ActivityManager::class.java).isLowRamDevice) 1 else RemoteProbeClient.workerCount
+    }
     val checking = pending.asStateFlow()
 
     suspend fun test(servers: List<Server>) {
-        if (!batch.tryLock()) return
-        try {
-            val targets = servers.filter { it.issue.isBlank() }.distinctBy { it.id }
-            val catalog = vault.state.value
-            val timeout = catalog.number("pingTimeout", 7).coerceIn(2, 60)
-            pending.value = targets.mapTo(mutableSetOf()) { it.id }
-            val directSlots = Semaphore(4)
-            // The isolated Xray runtime and its local SOCKS listener serve one config at a time.
-            val proxySlot = Semaphore(1)
-            coroutineScope {
-                for (server in targets) launch(Dispatchers.IO) {
-                    var error = ""
-                    val latency = try {
-                        val method = catalog.setting("pingMethod")
-                        val endpoint = ProbeEndpoint.from(server.config)
-                        when {
-                            method == "ICMP" -> directSlots.withPermit { icmpTest(requireEndpoint(endpoint), timeout) }
-                            method == "TCP" || (method == "auto" && endpoint?.tcp == true) -> directSlots.withPermit {
-                                val target = requireEndpoint(endpoint)
-                                require(target.tcp) { "Транспорт сервера не использует TCP" }
-                                tcpTest(target, timeout)
-                            }
-                            else -> proxySlot.withPermit {
-                                val config = ConfigBuilder.build(server, catalog, context.filesDir.absolutePath, probe = true)
-                                RemoteProbeClient.probe(context, config, catalog, VpnRuntime.state.value.phase != Phase.OFF)
-                            }
-                        }
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        error = if (e.isProbeTimeout()) PROBE_TIMEOUT_LABEL else safeError(e)
-                        -1L
-                    }
-                    vault.update { current ->
-                        val testedAt = System.currentTimeMillis()
-                        current.copy(subscriptions = current.subscriptions.map { sub ->
-                            sub.copy(servers = sub.servers.map {
-                                if (it.id == server.id && it.config == server.config) {
-                                    it.copy(latency = latency, testedAt = testedAt, latencyError = error)
-                                } else it
-                            })
-                        })
-                    }
-                    pending.update { it - server.id }
+        batch.withLock { measure(servers, automatic = false) }
+    }
+
+    internal suspend fun checkUnmeasuredProfiles() {
+        val unmeasured = vault.state.map(::unmeasuredProfiles).distinctUntilChanged()
+        unmeasured.combine(networkAvailable()) { awaiting, online -> awaiting.isNotEmpty() && online }.filter { it }.collect {
+            try {
+                while (checkPendingBatch()) {
+                    // Re-read the catalog after each batch because an import can finish during a scan.
                 }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                VpnRuntime.error(e)
+            }
+        }
+    }
+
+    private fun networkAvailable() = callbackFlow {
+        val request = NetworkRequest.Builder().addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            .addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN).build()
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) { trySend(connectivity.probeNetwork() != null) }
+            override fun onLost(network: Network) { trySend(connectivity.probeNetwork() != null) }
+            override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
+                trySend(connectivity.probeNetwork() != null)
+            }
+        }
+        connectivity.registerNetworkCallback(request, callback)
+        trySend(connectivity.probeNetwork() != null)
+        awaitClose { connectivity.unregisterNetworkCallback(callback) }
+    }.distinctUntilChanged()
+
+    private fun unmeasuredProfiles(catalog: Catalog) = catalog.subscriptions.flatMap { it.servers }
+        .filter { it.issue.isBlank() && it.testedAt == 0L }
+
+    private suspend fun checkPendingBatch(): Boolean = batch.withLock {
+        if (connectivity.probeNetwork() == null) return@withLock false
+        val catalog = vault.state.value
+        val targets = unmeasuredProfiles(catalog).sortedBy { it.id != catalog.selected }
+        if (targets.isEmpty()) return@withLock false
+        measure(targets, automatic = true)
+    }
+
+    private data class Measurement(val latency: Long, val error: String = "")
+
+    private suspend fun measure(servers: List<Server>, automatic: Boolean): Boolean {
+        val targets = servers.filter { it.issue.isBlank() }.distinctBy { it.id to it.config }
+        val catalog = vault.state.value
+        val timeout = catalog.number("pingTimeout", 7).coerceIn(2, 60)
+        pending.value = targets.mapTo(mutableSetOf()) { it.id }
+        val directSlots = Semaphore(4)
+        val proxySlots = Channel<Int>(probeWorkers)
+        repeat(probeWorkers) { proxySlots.trySend(it) }
+        var recorded = false
+        try {
+            for (group in targets.chunked(4)) {
+                if (automatic && connectivity.probeNetwork() == null) break
+                val results = coroutineScope {
+                    group.map { server -> async(Dispatchers.IO) {
+                        (server.id to server.config) to measureServer(server, catalog, timeout, directSlots, proxySlots)
+                    } }.awaitAll().toMap()
+                }
+                val online = !automatic || connectivity.probeNetwork() != null
+                val completed = if (online) results else results.filterValues { it.latency >= 0 }
+                if (completed.isNotEmpty()) {
+                    val testedAt = System.currentTimeMillis()
+                    vault.update { current -> current.copy(subscriptions = current.subscriptions.map { sub ->
+                        sub.copy(servers = sub.servers.map { server ->
+                            val result = completed[server.id to server.config]
+                            if (result == null) server else server.copy(latency = result.latency, testedAt = testedAt,
+                                latencyError = result.error)
+                        })
+                    }) }
+                    recorded = true
+                }
+                pending.value = pending.value - group.map { it.id }.toSet()
             }
         } finally {
+            proxySlots.close()
             pending.value = emptySet()
-            batch.unlock()
         }
+        return recorded
+    }
+
+    private suspend fun measureServer(
+        server: Server,
+        catalog: Catalog,
+        timeout: Int,
+        directSlots: Semaphore,
+        proxySlots: Channel<Int>,
+    ): Measurement = try {
+        val latency = when (catalog.setting("pingMethod")) {
+            "ICMP" -> directSlots.withPermit { icmpTest(requireEndpoint(ProbeEndpoint.from(server.config)), timeout) }
+            "TCP" -> directSlots.withPermit {
+                val endpoint = requireEndpoint(ProbeEndpoint.from(server.config))
+                require(endpoint.tcp) { "Транспорт сервера не использует TCP" }
+                tcpTest(endpoint, timeout)
+            }
+            else -> {
+                val worker = proxySlots.receive()
+                try {
+                    val config = ConfigBuilder.build(server, catalog, context.filesDir.absolutePath, probe = true)
+                    RemoteProbeClient.probe(context, config, catalog, VpnRuntime.state.value.phase != Phase.OFF, worker)
+                } finally {
+                    proxySlots.trySend(worker)
+                }
+            }
+        }
+        Measurement(latency)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        Measurement(-1, if (e.isProbeTimeout()) PROBE_TIMEOUT_LABEL else safeError(e))
     }
 
     private fun requireEndpoint(endpoint: ProbeEndpoint?) = requireNotNull(endpoint) {
@@ -150,7 +232,7 @@ class Prober(private val vault: Vault, private val context: Context) {
     companion object {
         private fun elapsedMillis(start: Long) = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start)
 
-        internal suspend fun proxyTestJson(json: String, catalog: Catalog, timeout: Int): Long {
+        internal suspend fun proxyTestJson(json: String, catalog: Catalog, timeout: Int, port: Int): Long {
             val url = catalog.setting("testUrl")
             require(url.startsWith("https://")) { "Проверка требует HTTPS URL" }
             val observedBalancer = JSONObject(json).optJSONObject("routing")?.optJSONArray("balancers")
@@ -161,12 +243,16 @@ class Prober(private val vault: Vault, private val context: Context) {
                     }
                 } == true
             val mode = catalog.setting("pingMode")
-            val method = if (catalog.setting("pingMethod") == "HEAD") "HEAD" else "GET"
+            val method = if (catalog.setting("pingMethod") == "GET") "GET" else "HEAD"
             val request = Request.Builder().url(url).method(method, null).header("Cache-Control", "no-cache").apply {
                 if (mode == "double") header("Connection", "close")
             }.build()
             val client = OkHttpClient.Builder()
-                .proxy(Proxy(Proxy.Type.SOCKS, InetSocketAddress("127.0.0.1", ConfigBuilder.PROBE_PORT)))
+                .apply {
+                    // The reference probe's Go transport uses HTTP/1.1 with its custom dialer.
+                    if (mode != "double" && mode != "keepalive") protocols(listOf(Protocol.HTTP_1_1))
+                }
+                .proxy(Proxy(Proxy.Type.SOCKS, InetSocketAddress("127.0.0.1", port)))
                 .callTimeout(timeout.toLong(), TimeUnit.SECONDS)
                 .connectTimeout(timeout.toLong(), TimeUnit.SECONDS)
                 .readTimeout(timeout.toLong(), TimeUnit.SECONDS)
@@ -182,55 +268,85 @@ class Prober(private val vault: Vault, private val context: Context) {
                     }
                     response
                 }
-                .connectionPool(ConnectionPool(if (mode == "keepalive") 2 else 0, 30, TimeUnit.SECONDS))
+                .connectionPool(ConnectionPool(if (mode == "double") 0 else 1, 30, TimeUnit.SECONDS))
                 .build()
 
             Core.validate(json)
             Core.start(json)
             try {
-                var best: Long? = null
-                var failure: Exception? = null
-                val samples = if (mode in listOf("double", "keepalive")) 2 else 1
-                repeat(samples) { index ->
-                    val waitForBalancer = index == 0 && observedBalancer
-                    val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(timeout.toLong())
-                    val retryInterval = TimeUnit.MILLISECONDS.toNanos(250)
-                    while (true) {
-                        val call = client.newCall(request)
-                        val start = System.nanoTime()
-                        if (waitForBalancer) {
-                            call.timeout().timeout((deadline - start).coerceAtLeast(1), TimeUnit.NANOSECONDS)
-                        }
-                        try {
-                            call.execute().use { response ->
-                                val latency = elapsedMillis(start)
-                                best = minOf(best ?: latency, latency)
-                                if (mode == "keepalive" && index == 0) {
-                                    response.body?.byteStream()?.use { it.readBounded(65537) }
-                                }
-                            }
-                        } catch (e: CancellationException) {
-                            throw e
-                        } catch (e: Exception) {
-                            // The observatory starts asynchronously. Until it has results, routing can
-                            // send a request to the fallback (often blackhole) and close the socket.
-                            if (waitForBalancer && best == null && e is IOException &&
-                                deadline - System.nanoTime() > retryInterval
-                            ) {
-                                delay(250)
-                                continue
-                            }
-                            if (failure?.isProbeTimeout() != true) failure = e
-                        }
-                        break
-                    }
-                }
-                return best ?: throw (failure ?: IllegalStateException("Проверка не выполнена"))
+                return measureProxyLatency(client, request, timeout, mode, observedBalancer)
             } finally {
                 client.connectionPool.evictAll()
                 client.dispatcher.executorService.shutdown()
                 Core.stop()
             }
         }
+
+        internal suspend fun measureProxyLatency(
+            client: OkHttpClient,
+            request: Request,
+            timeout: Int,
+            mode: String,
+            observedBalancer: Boolean,
+        ): Long {
+            val warmup = mode !in listOf("double", "keepalive")
+            val tracker = if (warmup) ProbeConnectionTracker() else null
+            val measuringClient = if (tracker != null) client.newBuilder().eventListener(tracker).build() else client
+            var warmedConnection: Connection? = null
+            val timeoutNanos = TimeUnit.SECONDS.toNanos(timeout.toLong())
+            val warmupDeadline = System.nanoTime() + timeoutNanos
+            var best: Long? = null
+            var failure: Exception? = null
+            // Allow one extra request if the peer closed the warmed connection.
+            repeat(if (warmup) 3 else 2) { index ->
+                val deadline = if (warmup) warmupDeadline else System.nanoTime() + timeoutNanos
+                val waitForBalancer = index == 0 && observedBalancer
+                while (true) {
+                    val remaining = deadline - System.nanoTime()
+                    if (remaining <= 0) throw ProbeTimeout()
+                    tracker?.connection = null
+                    val call = measuringClient.newCall(request)
+                    call.timeout().timeout(remaining, TimeUnit.NANOSECONDS)
+                    val start = System.nanoTime()
+                    try {
+                        call.execute().use { response ->
+                            val latency = elapsedMillis(start)
+                            if (tracker != null) {
+                                val connection = tracker.connection
+                                if (connection != null && connection === warmedConnection) return latency
+                                warmedConnection = connection
+                            } else {
+                                best = minOf(best ?: latency, latency)
+                            }
+                            if (warmup || (mode == "keepalive" && index == 0)) {
+                                // Consume small bodies so OkHttp can reuse the connection for the measurement.
+                                response.body?.byteStream()?.readBounded(65_537)
+                            }
+                        }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        // The first request may arrive before the observatory has selected an outbound.
+                        if (waitForBalancer && e is IOException && deadline - System.nanoTime() > 250_000_000L) {
+                            delay(250)
+                            continue
+                        }
+                        if (warmup) throw e
+                        if (failure?.isProbeTimeout() != true) failure = e
+                    }
+                    break
+                }
+            }
+            if (warmup) error("Сервер закрывает соединение до повторного замера")
+            return best ?: throw (failure ?: IllegalStateException("Проверка не выполнена"))
+        }
+    }
+}
+
+private class ProbeConnectionTracker : EventListener() {
+    var connection: Connection? = null
+
+    override fun connectionAcquired(call: Call, connection: Connection) {
+        this.connection = connection
     }
 }

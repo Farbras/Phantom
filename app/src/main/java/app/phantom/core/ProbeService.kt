@@ -15,6 +15,7 @@ import android.os.Messenger
 import android.os.ParcelFileDescriptor
 import android.os.RemoteException
 import app.phantom.data.Catalog
+import app.phantom.data.objects
 import app.phantom.data.safeError
 import app.phantom.vpn.PhantomVpnService
 import kotlinx.coroutines.*
@@ -23,6 +24,8 @@ import kotlinx.coroutines.sync.withLock
 import libXray.DialerController
 import libXray.LibXray
 import org.json.JSONObject
+import java.net.InetAddress
+import java.net.ServerSocket
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -35,7 +38,7 @@ private const val ERROR = 3
 private val probeLock = Mutex()
 
 /** Isolated Go runtime: probing never replaces the core that owns the active tunnel. */
-class ProbeService : Service() {
+open class ProbeService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val messenger = Messenger(Handler(Looper.getMainLooper()) { message ->
         if (message.what != REQUEST) return@Handler false
@@ -73,7 +76,10 @@ class ProbeService : Service() {
             LibXray.setDNS(ProbeSockets, if (':' in dns) "[$dns]:53" else "$dns:53")
             val settings = JSONObject(data.getString("settings")!!)
             val catalog = Catalog(settings = settings.keys().asSequence().associateWith { settings.getString(it) })
-            return Prober.proxyTestJson(data.getString("config")!!, catalog, catalog.number("pingTimeout", 7).coerceIn(2, 60))
+            val port = ServerSocket(0, 1, InetAddress.getByName("127.0.0.1")).use { it.localPort }
+            val config = JSONObject(data.getString("config")!!)
+            config.getJSONArray("inbounds").objects().single { it.optString("tag") == "socks" }.put("port", port)
+            return Prober.proxyTestJson(config.toString(), catalog, catalog.number("pingTimeout", 7).coerceIn(2, 60), port)
         } finally {
             LibXray.resetDNS()
             ProbeSockets.protector = null
@@ -88,6 +94,9 @@ class ProbeService : Service() {
         super.onDestroy()
     }
 }
+
+class SecondProbeService : ProbeService()
+class ThirdProbeService : ProbeService()
 
 private object ProbeSockets : DialerController {
     @Volatile var protector: Messenger? = null
@@ -146,8 +155,11 @@ private suspend fun bindMessenger(context: Context, intent: Intent, flags: Int):
     } ?: throw ProbeTimeout()
 
 object RemoteProbeClient {
-    suspend fun probe(context: Context, config: String, catalog: Catalog, active: Boolean): Long {
-        val (messenger, connection) = bindMessenger(context, Intent(context, ProbeService::class.java), Context.BIND_AUTO_CREATE)
+    private val workers = listOf(ProbeService::class.java, SecondProbeService::class.java, ThirdProbeService::class.java)
+    internal val workerCount get() = workers.size
+
+    suspend fun probe(context: Context, config: String, catalog: Catalog, active: Boolean, worker: Int = 0): Long {
+        val (messenger, connection) = bindMessenger(context, Intent(context, workers[worker]), Context.BIND_AUTO_CREATE)
         try {
             val timeout = catalog.number("pingTimeout", 7).coerceIn(2, 60)
             val samples = if (catalog.setting("pingMode") in listOf("double", "keepalive")) 2 else 1

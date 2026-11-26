@@ -24,7 +24,7 @@ internal data class VpnOperation(
 }
 
 internal fun availableVpnAction(phase: Phase, pending: VpnAction?) = when {
-    pending == VpnAction.DISCONNECT || phase == Phase.STARTING || phase == Phase.STOPPING -> null
+    pending == VpnAction.DISCONNECT || phase == Phase.STOPPING -> null
     phase != Phase.OFF -> VpnAction.DISCONNECT
     pending == null -> VpnAction.CONNECT
     else -> null

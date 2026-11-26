@@ -26,5 +26,7 @@
             <meta-data android:name="android.service.quicksettings.ACTIVE_TILE" android:value="true" />
         </service>
         <service android:name=".core.ProbeService" android:exported="false" android:process=":probe" />
+        <service android:name=".core.SecondProbeService" android:exported="false" android:process=":probe2" />
+        <service android:name=".core.ThirdProbeService" android:exported="false" android:process=":probe3" />
     </application>
 </manifest>

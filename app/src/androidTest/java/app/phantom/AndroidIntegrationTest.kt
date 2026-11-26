@@ -2,6 +2,7 @@ package app.phantom
 
 import android.content.*
 import android.net.VpnService
+import android.os.Bundle
 import android.os.SystemClock
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -9,6 +10,7 @@ import app.phantom.core.*
 import app.phantom.data.*
 import app.phantom.vpn.*
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.first
 import org.junit.Assert.*
 import org.junit.Assume.assumeTrue
 import org.junit.Test
@@ -47,6 +49,43 @@ class AndroidIntegrationTest {
         val bytes=File(app.noBackupFilesDir,"catalog.aes").readBytes()
         assertFalse(String(bytes,Charsets.ISO_8859_1).contains("synthetic-vault-marker"))
         app.vault.setting("filter","")
+    }
+    @Test fun automaticLatencyCoversInstalledAndNewSubscriptions() = runBlocking {
+        assumeTrue("Requires an existing test subscription on the device",
+            InstrumentationRegistry.getArguments().getString("latencyAudit") == "true")
+        app.ready.await()
+        val installed = app.vault.state.value.subscriptions.filter { it.url.isNotBlank() }.map { it.id }.toSet()
+        assumeTrue(installed.isNotEmpty())
+        fun supported(catalog: Catalog) = catalog.subscriptions.filter { it.id in installed }
+            .flatMap { it.servers }.filter { it.issue.isBlank() }
+        val checked = withTimeout(300_000) {
+            supported(app.vault.state.first { catalog ->
+                val profiles = supported(catalog)
+                profiles.isNotEmpty() && profiles.all { it.testedAt > 0 }
+            })
+        }
+        val realLatencies = checked.mapNotNull { it.latency?.takeIf { delay -> delay >= 0 } }.sorted()
+        assertTrue("At least one installed profile must respond", realLatencies.isNotEmpty())
+        instrumentation.sendStatus(0, Bundle().apply {
+            putString("stream", "\nInstalled profiles: ${checked.size}, successful: ${realLatencies.size}, " +
+                "median: ${realLatencies[realLatencies.size / 2]} ms, max: ${realLatencies.last()} ms\n")
+        })
+
+        val source = checked.first { (it.latency ?: -1L) >= 0 }
+        val title = "Latency audit ${id()}"
+        try {
+            val profile = JSONObject(source.config).put("remarks", title)
+            app.subscriptions.importText(profile.toString(), title)
+            val imported = withTimeout(30_000) {
+                app.vault.state.first { catalog ->
+                    catalog.subscriptions.any { it.name == title && it.servers.single().testedAt > 0 }
+                }.subscriptions.single { it.name == title }.servers.single()
+            }
+            assertTrue("A newly imported working profile must be measured without a manual check", (imported.latency ?: -1L) >= 0)
+            instrumentation.sendStatus(0, Bundle().apply { putString("stream", "\nNew subscription auto-ping: ${imported.latency} ms\n") })
+        } finally {
+            app.vault.update { catalog -> catalog.copy(subscriptions = catalog.subscriptions.filter { it.name != title }) }
+        }
     }
     @Test fun realVpnCarriesAnotherApplicationAndRecovers()=runBlocking {
         app.ready.await()

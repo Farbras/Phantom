@@ -8,6 +8,7 @@ import androidx.core.app.NotificationCompat
 import androidx.work.*
 import app.phantom.R
 import app.phantom.core.Importer
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -18,13 +19,13 @@ class Subscriptions(private val context: Context, private val vault: Vault) {
     suspend fun importText(text: String, title: String = "Импорт", depth: Int = 0): Unit = withContext(Dispatchers.IO) {
         require(depth<3 && text.toByteArray().size<=Importer.MAX_BYTES) { "Слишком большой или вложенный импорт" }
         val value=text.trim()
-        val uri=runCatching { android.net.Uri.parse(value) }.getOrNull()
+        val uri=runCatching { android.net.Uri.parse(value).normalizeScheme() }.getOrNull()
         when {
             uri?.scheme=="phantom" -> {
                 require(uri.host=="import") { "Поддерживается phantom://import?url=…" }
                 importText(uri.getQueryParameter("url") ?: uri.getQueryParameter("text") ?: error("В ссылке нет url или text"),title,depth+1)
             }
-            uri?.scheme in listOf("http","https") && '\n' !in value && !value.startsWith("http://",true) -> addUrl(value,title)
+            uri?.scheme == "https" && '\n' !in value -> addUrl(uri.toString(),title)
             value.startsWith("happ://") -> error("Ссылка управления Happ не является конфигурацией. Нужен исходный URL или Xray JSON")
             else -> {
                 val servers=Importer.parse(value)
@@ -36,7 +37,7 @@ class Subscriptions(private val context: Context, private val vault: Vault) {
         }
     }
     private suspend fun addUrl(url: String,title: String) {
-        val uri=android.net.Uri.parse(url)
+        val uri=android.net.Uri.parse(url).normalizeScheme()
         require(uri.scheme=="https" && !uri.host.isNullOrBlank() && uri.userInfo==null) { "Для подписки нужен HTTPS URL без логина в адресе" }
         val c=vault.state.value
         val duplicate=c.subscriptions.firstOrNull { it.url==url }
@@ -75,15 +76,36 @@ class Subscriptions(private val context: Context, private val vault: Vault) {
     private suspend fun fetch(sub: Subscription): Subscription = withContext(Dispatchers.IO) {
         val c=vault.state.value
         val ua=sub.userAgent.ifBlank { c.setting("userAgent") }
-        val (text,meta)=fetchSync(sub,c,ua)
+        val encrypted = if (sub.userAgent.isBlank() && ua == Defaults.values["userAgent"] && !c.flag("hwid") &&
+            OversecureSubscription.supports(sub.url)) {
+            try {
+                OversecureSubscription.fetch(sub.url, sub.lastFetchHost)
+            } catch (_: OversecureSubscription.CryptoUnavailable) {
+                null
+            }
+        } else null
+        val (text,meta) = encrypted?.let { it.text to sub.metadata } ?: fetchSync(sub,c,ua)
         val parsed=Importer.parse(text)
         require(parsed.isNotEmpty()) { "В подписке нет серверов" }
-        val old=sub.servers.associateBy { it.id }
         val nodes=if(c.flag("deduplicate")) parsed.distinctBy { it.id } else parsed
-        val merged=nodes.map { s -> old[s.id]?.let { s.copy(favorite=it.favorite,latency=it.latency,testedAt=it.testedAt,latencyError=it.latencyError) } ?: s }
+        val old = sub.servers.associateBy { it.id }
+        val oldNames = sub.servers.groupBy { it.name }
+        val newNames = nodes.groupingBy { it.name }.eachCount()
+        val merged = nodes.map { server ->
+            val previous = old[server.id] ?: oldNames[server.name]?.singleOrNull()?.takeIf {
+                newNames[server.name] == 1 && it.issue.isBlank() && server.issue.isBlank()
+            }
+            when {
+                previous == null -> server
+                previous.config == server.config -> server.copy(id = previous.id, favorite = previous.favorite,
+                    latency = previous.latency, testedAt = previous.testedAt, latencyError = previous.latencyError)
+                else -> server.copy(id = previous.id, favorite = previous.favorite)
+            }
+        }
         // A failed update must not destroy a working subscription.
         require(merged.any { it.issue.isBlank() } || sub.servers.isEmpty()) { "Обновление не содержит поддерживаемых серверов; прежний список сохранён" }
-        sub.copy(name=meta["profile-title"]?.ifBlank { sub.name } ?: sub.name,servers=merged,metadata=meta,updated=System.currentTimeMillis(),error="")
+        sub.copy(name=meta["profile-title"]?.ifBlank { sub.name } ?: sub.name,servers=merged,metadata=meta,
+            updated=System.currentTimeMillis(),error="",lastFetchHost=encrypted?.host.orEmpty())
     }
     suspend fun refresh(subId: String) = withContext(Dispatchers.IO) {
         val sub=vault.state.value.subscriptions.find { it.id==subId } ?: return@withContext
@@ -92,17 +114,33 @@ class Subscriptions(private val context: Context, private val vault: Vault) {
             val fresh=fetch(sub)
             vault.update { current ->
                 val latest=current.subscriptions.find { it.id==subId } ?: return@update current
-                if(latest.url!=sub.url || latest.userAgent!=sub.userAgent) return@update current
-                val favorites=latest.servers.associate { it.id to it.favorite }
-                current.copy(subscriptions=current.subscriptions.map { if(it.id==subId) fresh.copy(pinned=latest.pinned,expanded=latest.expanded,
-                    servers=fresh.servers.map { s->s.copy(favorite=favorites[s.id] ?: s.favorite) }) else it })
+                if(latest.url!=sub.url || latest.userAgent!=sub.userAgent || latest.updated!=sub.updated) return@update current
+                val previous = latest.servers.associateBy { it.id }
+                val nodes = fresh.servers.map { server ->
+                    val saved = previous[server.id]
+                    if (saved != null && saved.config == server.config) server.copy(favorite = saved.favorite, latency = saved.latency,
+                        testedAt = saved.testedAt, latencyError = saved.latencyError)
+                    else server.copy(favorite = saved?.favorite ?: server.favorite)
+                }
+                val subscriptions = current.subscriptions.map {
+                    if (it.id == subId) fresh.copy(pinned = latest.pinned, expanded = latest.expanded, servers = nodes) else it
+                }
+                val selected = if (latest.servers.any { it.id == current.selected } &&
+                    subscriptions.none { group -> group.servers.any { it.id == current.selected && it.issue.isBlank() } }) {
+                    fresh.servers.firstOrNull { it.issue.isBlank() }?.id.orEmpty()
+                } else current.selected
+                current.copy(subscriptions = subscriptions, selected = selected)
             }
             if(vault.state.value.flag("updateNotice")) notifyUpdated()
             app.phantom.vpn.VpnRuntime.log("Подписка обновлена: ${fresh.servers.size} записей")
+        } catch(e: CancellationException) {
+            throw e
         } catch(e: Exception) {
             val message=safeError(e)
             app.phantom.vpn.VpnRuntime.log("Ошибка обновления подписки: $message","error")
-            vault.update { c->c.copy(subscriptions=c.subscriptions.map { if(it.id==subId) it.copy(error=message) else it }) }
+            vault.update { c->c.copy(subscriptions=c.subscriptions.map {
+                if(it.id==subId && it.url==sub.url && it.userAgent==sub.userAgent && it.updated==sub.updated) it.copy(error=message) else it
+            }) }
             throw IllegalStateException(message)
         }
     }
