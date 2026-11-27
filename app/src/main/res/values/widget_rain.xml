@@ -1,0 +1,10 @@
+<resources>
+    <integer name="widget_rain_fade_duration">550</integer>
+
+    <style name="PhantomWidgetRainFrame">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">match_parent</item>
+        <item name="android:scaleType">centerCrop</item>
+        <item name="android:importantForAccessibility">no</item>
+    </style>
+</resources>

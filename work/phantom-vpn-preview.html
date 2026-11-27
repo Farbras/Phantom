@@ -1,0 +1,214 @@
+<style>
+  #phantom-vpn-preview {
+    --terminal-bg: #101514;
+    --terminal-text: #e1e9e3;
+    --terminal-muted: #a3b0a8;
+    --terminal-green: #a2cdb4;
+    --terminal-outline: #4b5a52;
+    --terminal-rule: #344139;
+    --terminal-control: #19211d;
+    --terminal-hover: #232e27;
+    padding: 34px 16px 28px;
+  }
+
+  #phantom-vpn-preview .phantom-layout {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+    gap: 18px;
+    max-width: 690px;
+    margin-inline: auto;
+  }
+
+  #phantom-vpn-preview figure {
+    min-width: 0;
+    margin: 0;
+  }
+
+  #phantom-vpn-preview figcaption {
+    margin-block-start: 9px;
+    text-align: center;
+    font-size: 12px;
+    color: inherit;
+  }
+
+  #phantom-vpn-preview .phantom-terminal {
+    box-sizing: border-box;
+    display: grid;
+    gap: 14px;
+    padding: 15px;
+    border: 1px solid var(--terminal-outline);
+    border-radius: 8px;
+    background: var(--terminal-bg);
+    color: var(--terminal-text);
+    font: 400 14px/1.35 "Cascadia Mono", Consolas, "Liberation Mono", monospace;
+  }
+
+  #phantom-vpn-preview .phantom-header,
+  #phantom-vpn-preview .phantom-location,
+  #phantom-vpn-preview .phantom-compact-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  #phantom-vpn-preview .phantom-command {
+    border: 0;
+    padding: 0;
+    background: transparent;
+    color: var(--terminal-muted);
+    font: inherit;
+  }
+
+  #phantom-vpn-preview .phantom-status {
+    color: var(--terminal-green);
+    white-space: nowrap;
+  }
+
+  #phantom-vpn-preview[data-connected="false"] .phantom-status {
+    color: var(--terminal-muted);
+  }
+
+  #phantom-vpn-preview .phantom-location {
+    padding-block: 2px;
+  }
+
+  #phantom-vpn-preview .phantom-destination {
+    white-space: nowrap;
+  }
+
+  #phantom-vpn-preview .phantom-secondary,
+  #phantom-vpn-preview dt {
+    color: var(--terminal-muted);
+    font-size: 12px;
+  }
+
+  #phantom-vpn-preview .phantom-secondary {
+    margin-block-start: 3px;
+  }
+
+  #phantom-vpn-preview .phantom-arrow {
+    color: var(--terminal-muted);
+    font-size: 19px;
+  }
+
+  #phantom-vpn-preview .phantom-details {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 10px;
+    margin: 0;
+    border-block-start: 1px solid var(--terminal-rule);
+    padding-block-start: 11px;
+  }
+
+  #phantom-vpn-preview .phantom-details > :last-child {
+    text-align: end;
+  }
+
+  #phantom-vpn-preview dd {
+    margin: 3px 0 0;
+  }
+
+  #phantom-vpn-preview .phantom-action {
+    justify-self: start;
+    padding: 6px 11px;
+    border: 1px solid var(--terminal-outline);
+    border-radius: 4px;
+    background: var(--terminal-control);
+    color: inherit;
+    font: inherit;
+    white-space: nowrap;
+  }
+
+  #phantom-vpn-preview .phantom-action:hover {
+    background: var(--terminal-hover);
+  }
+
+  #phantom-vpn-preview .phantom-action:focus-visible {
+    outline: 2px solid var(--terminal-text);
+    outline-offset: 2px;
+  }
+
+  @media (max-width: 630px) {
+    #phantom-vpn-preview .phantom-layout {
+      grid-template-columns: minmax(0, 1fr);
+      max-width: 380px;
+    }
+  }
+
+  @media (pointer: coarse) {
+    #phantom-vpn-preview .phantom-action {
+      min-block-size: 44px;
+    }
+  }
+</style>
+
+<div id="phantom-vpn-preview" class="viz-dotted-background" data-connected="true" lang="ru">
+  <div class="phantom-layout">
+    <figure>
+      <div class="phantom-terminal" aria-label="Большой виджет Phantom VPN">
+        <div class="phantom-header">
+          <code class="phantom-command">$ vpn status</code>
+          <span class="phantom-status" aria-live="polite">[АКТИВЕН]</span>
+        </div>
+        <div class="phantom-location">
+          <div>
+            <div class="phantom-destination">Россия · Auto</div>
+            <div class="phantom-secondary">Балансер Обход-1</div>
+          </div>
+          <span class="phantom-arrow" aria-hidden="true">›</span>
+        </div>
+        <dl class="phantom-details">
+          <div>
+            <dt>Протокол</dt>
+            <dd>VLESS / TROJAN</dd>
+          </div>
+          <div>
+            <dt>Длительность</dt>
+            <dd data-duration>00:22</dd>
+          </div>
+        </dl>
+        <button type="button" class="phantom-action cursor-interaction">Отключить</button>
+      </div>
+      <figcaption>Большой виджет</figcaption>
+    </figure>
+
+    <figure>
+      <div class="phantom-terminal" aria-label="Компактный виджет Phantom VPN">
+        <div class="phantom-header">
+          <code class="phantom-command">$ vpn status</code>
+          <span class="phantom-status">[АКТИВЕН]</span>
+        </div>
+        <div class="phantom-compact-row">
+          <span class="phantom-destination">Россия · Auto</span>
+          <button type="button" class="phantom-action cursor-interaction">Отключить</button>
+        </div>
+      </div>
+      <figcaption>Компактный виджет</figcaption>
+    </figure>
+  </div>
+</div>
+
+<script>
+  {
+    const preview = document.getElementById("phantom-vpn-preview");
+    const actions = preview.querySelectorAll(".phantom-action");
+    const statuses = preview.querySelectorAll(".phantom-status");
+    const duration = preview.querySelector("[data-duration]");
+
+    function toggleConnection() {
+      const connected = preview.dataset.connected !== "true";
+      preview.dataset.connected = String(connected);
+      duration.textContent = connected ? "00:22" : "—";
+      statuses.forEach((status) => {
+        status.textContent = connected ? "[АКТИВЕН]" : "[ОТКЛЮЧЕН]";
+      });
+      actions.forEach((action) => {
+        action.textContent = connected ? "Отключить" : "Подключить";
+      });
+    }
+
+    actions.forEach((action) => action.addEventListener("click", toggleConnection));
+  }
+</script>

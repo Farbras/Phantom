@@ -16,6 +16,20 @@
                 <data android:scheme="phantom" /><data android:scheme="vless" /><data android:scheme="vmess" /><data android:scheme="trojan" /><data android:scheme="ss" /><data android:scheme="hysteria2" /><data android:scheme="hy2" />
             </intent-filter>
         </activity>
+        <activity
+            android:name=".widget.WidgetVpnActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:taskAffinity=""
+            android:theme="@style/Theme.Phantom.WidgetAction" />
+        <receiver android:name=".widget.CompactVpnWidget" android:exported="false" android:label="@string/widget_compact_name">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_compact_info" />
+        </receiver>
+        <receiver android:name=".widget.LargeVpnWidget" android:exported="false" android:label="@string/widget_large_name">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_large_info" />
+        </receiver>
         <!-- Eligible as a user-configured VPN. No exact-alarm permission is needed for this documented exemption. -->
         <service android:name=".vpn.PhantomVpnService" android:permission="android.permission.BIND_VPN_SERVICE" android:exported="true" android:foregroundServiceType="systemExempted" tools:ignore="ForegroundServicePermission">
             <intent-filter><action android:name="android.net.VpnService" /></intent-filter>

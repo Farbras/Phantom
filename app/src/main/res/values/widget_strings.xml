@@ -1,0 +1,20 @@
+<resources>
+    <string name="widget_compact_name">Phantom VPN · компактный</string>
+    <string name="widget_large_name">Phantom VPN · большой</string>
+    <string name="widget_prompt">$ vpn status</string>
+    <string name="widget_off">[ОТКЛЮЧЕН]</string>
+    <string name="widget_starting">[ПОДКЛЮЧЕНИЕ…]</string>
+    <string name="widget_active">[АКТИВЕН]</string>
+    <string name="widget_waiting">[НЕТ СЕТИ]</string>
+    <string name="widget_no_route">[НЕТ СВЯЗИ]</string>
+    <string name="widget_stopping">[ОТКЛЮЧЕНИЕ…]</string>
+    <string name="widget_connect">Подключить</string>
+    <string name="widget_disconnect">Отключить</string>
+    <string name="widget_location">%1$s · %2$s</string>
+    <string name="widget_open_location">%1$s. %2$s. Выбрать локацию</string>
+    <string name="widget_location_arrow">›</string>
+    <string name="widget_auto">Auto</string>
+    <string name="widget_protocol_label">Протокол</string>
+    <string name="widget_duration_label">Длительность</string>
+    <string name="widget_empty_value">—</string>
+</resources>

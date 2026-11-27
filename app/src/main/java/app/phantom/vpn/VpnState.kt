@@ -9,12 +9,15 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+internal const val NO_AUTO_SERVER_MESSAGE = "Ни один сервер не ответил. Выберите сервер вручную."
+
 enum class Phase { OFF, STARTING, TUNNEL, ONLINE, WAITING, ERROR, STOPPING }
 data class VpnSnapshot(
     val phase: Phase=Phase.OFF, val message: String="Отключено", val serverId: String="",
     val tunnel: Boolean=false, val online: Boolean=false, val connectedAt: Long=0,
     val tx: Long=0, val rx: Long=0, val txSpeed: Long=0, val rxSpeed: Long=0, val latency: Long?=null,
-    val routeUnconfirmed: Boolean=false,
+    val routeUnconfirmed: Boolean=false, val serverName: String="",
+    val serverProtocol: String="",
 )
 object VpnRuntime {
     internal val mutable=MutableStateFlow(VpnSnapshot())
@@ -28,6 +31,14 @@ object VpnRuntime {
     internal fun request(action: VpnAction): Long? = synchronized(transcript) {
         if (availableVpnAction(state.value.phase, pendingOperation()?.action) != action) null
         else beginOperation(action)
+    }
+
+    internal fun widgetState() = synchronized(transcript) {
+        WidgetVpnState.from(state.value, transcript.value.lastOrNull())
+    }
+
+    internal fun requestFromWidget(action: VpnAction): Long? = synchronized(transcript) {
+        if (widgetState().allows(action)) beginOperation(action) else null
     }
 
     internal fun serviceOperation(action: VpnAction): Long? = synchronized(transcript) {

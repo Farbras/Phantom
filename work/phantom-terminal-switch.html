@@ -1,0 +1,396 @@
+<div id="phantom-terminal-switch" class="viz-dotted-background" lang="ru">
+  <section class="terminal-vpn" data-phase="off" aria-label="Терминал Phantom VPN">
+    <header class="terminal-header">
+      <div class="terminal-name"><span aria-hidden="true">&gt;_</span> PHANTOM VPN</div>
+      <span class="terminal-badge" aria-hidden="true">OFFLINE</span>
+    </header>
+
+    <div class="terminal-stage">
+      <div class="terminal-code-rain" aria-hidden="true">
+        <span style="--x: 8%; --delay: 60ms">A7<br>0F<br>11<br>C8<br>01<br>5E<br>9B</span>
+        <span style="--x: 16%; --delay: 0ms">01<br>E2<br>7F<br>00<br>A4<br>3C<br>10</span>
+        <span style="--x: 27%; --delay: 140ms">F9<br>1E<br>00<br>7A<br>CC<br>04<br>11</span>
+        <span style="--x: 39%; --delay: 50ms">0D<br>3A<br>F2<br>01<br>AC<br>09<br>7E</span>
+        <span style="--x: 59%; --delay: 105ms">01<br>0A<br>D8<br>00<br>22<br>5B<br>1F</span>
+        <span style="--x: 71%; --delay: 20ms">3F<br>0B<br>6A<br>01<br>9C<br>00<br>DE</span>
+        <span style="--x: 82%; --delay: 75ms">11<br>0E<br>2B<br>CA<br>00<br>7D<br>4A</span>
+        <span style="--x: 91%; --delay: 125ms">80<br>CD<br>13<br>0A<br>FF<br>01<br>B6</span>
+      </div>
+      <span class="terminal-scanline" aria-hidden="true"></span>
+      <div class="terminal-dial">
+        <span class="terminal-ticks" aria-hidden="true"></span>
+        <span class="terminal-arc" aria-hidden="true"></span>
+        <button class="terminal-button cursor-interaction" type="button">
+          <span class="terminal-power"><i data-lucide="power" aria-hidden="true"></i></span>
+          <span class="terminal-action">Подключить</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="terminal-console">
+      <div class="terminal-line" aria-hidden="true">
+        <span class="terminal-prompt">&gt;</span>
+        <code class="terminal-command">tunnel.idle</code>
+        <span class="terminal-caret"></span>
+      </div>
+      <p class="terminal-status" role="status">VPN отключён</p>
+    </div>
+  </section>
+</div>
+
+<style>
+  @property --terminal-degrees {
+    syntax: '<angle>';
+    initial-value: 0deg;
+    inherits: false;
+  }
+
+  #phantom-terminal-switch {
+    display: grid;
+    justify-items: center;
+    padding: 12px;
+    --terminal-purple: #b78dff;
+    --terminal-mint: #a4fbbd;
+    --terminal-duration: 650ms;
+    --terminal-ease: cubic-bezier(.2, .7, .2, 1);
+  }
+
+  #phantom-terminal-switch .terminal-vpn {
+    color-scheme: dark;
+    box-sizing: border-box;
+    width: min(100%, 424px);
+    padding: 14px;
+    border: 1px solid #3a2c4f;
+    border-radius: 19px;
+    background: #100d17;
+    color: #eddefc;
+    font: 400 12px/1.5 'Cascadia Code', Consolas, monospace;
+  }
+
+  #phantom-terminal-switch .terminal-header {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 16px;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+
+  #phantom-terminal-switch .terminal-name {
+    letter-spacing: .09em;
+    font-weight: 600;
+  }
+
+  #phantom-terminal-switch .terminal-name span {
+    color: var(--terminal-purple);
+    margin-right: 4px;
+  }
+
+  #phantom-terminal-switch .terminal-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: #b9a8c9;
+    letter-spacing: .06em;
+  }
+
+  #phantom-terminal-switch .terminal-badge::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    background: currentColor;
+    border-radius: 50%;
+  }
+
+  #phantom-terminal-switch [data-phase="boot"] .terminal-badge,
+  #phantom-terminal-switch [data-phase="verify"] .terminal-badge,
+  #phantom-terminal-switch [data-phase="stop"] .terminal-badge {
+    color: var(--terminal-purple);
+  }
+
+  #phantom-terminal-switch [data-phase="on"] .terminal-badge {
+    color: var(--terminal-mint);
+  }
+
+  #phantom-terminal-switch .terminal-stage {
+    position: relative;
+    isolation: isolate;
+    display: grid;
+    place-items: center;
+    min-height: 250px;
+    overflow: hidden;
+    border: 1px solid #30253e;
+    border-radius: 12px;
+    background:
+      linear-gradient(#b78dff0a 1px, transparent 1px) center / 18px 18px,
+      linear-gradient(90deg, #b78dff0a 1px, transparent 1px) center / 18px 18px,
+      radial-gradient(ellipse at center, #211332, #0b0911 76%);
+  }
+
+  #phantom-terminal-switch .terminal-code-rain {
+    position: absolute;
+    inset: 0;
+    opacity: .24;
+    mask-image: linear-gradient(transparent, #fff 36%, #fff 64%, transparent);
+    transition: opacity 260ms ease;
+    pointer-events: none;
+  }
+
+  #phantom-terminal-switch .terminal-code-rain span {
+    position: absolute;
+    left: var(--x);
+    top: 19%;
+    color: #a78ac7;
+    font-size: 11px;
+    line-height: 1.9;
+  }
+
+  #phantom-terminal-switch [data-phase="boot"] .terminal-code-rain,
+  #phantom-terminal-switch [data-phase="stop"] .terminal-code-rain {
+    opacity: 1;
+  }
+
+  #phantom-terminal-switch [data-phase="boot"] .terminal-code-rain span,
+  #phantom-terminal-switch [data-phase="stop"] .terminal-code-rain span {
+    animation: phantom-terminal-rain var(--terminal-duration) steps(9, end) var(--delay) both;
+  }
+
+  #phantom-terminal-switch [data-phase="stop"] .terminal-code-rain span {
+    animation-direction: reverse;
+  }
+
+  @keyframes phantom-terminal-rain {
+    from { transform: translateY(-74px); opacity: .28; }
+    45% { color: var(--terminal-mint); opacity: 1; }
+    to { transform: translateY(75px); opacity: .12; }
+  }
+
+  #phantom-terminal-switch .terminal-scanline {
+    position: absolute;
+    top: 0;
+    width: 100%;
+    height: 2px;
+    opacity: 0;
+    background: linear-gradient(90deg, transparent, #c2a1ff, transparent);
+    box-shadow: 0 0 14px #b78dff80;
+    pointer-events: none;
+  }
+
+  #phantom-terminal-switch [data-phase="boot"] .terminal-scanline,
+  #phantom-terminal-switch [data-phase="stop"] .terminal-scanline {
+    animation: phantom-terminal-scan var(--terminal-duration) ease-in-out both;
+  }
+
+  #phantom-terminal-switch [data-phase="stop"] .terminal-scanline {
+    animation-direction: reverse;
+  }
+
+  @keyframes phantom-terminal-scan {
+    from { transform: translateY(0); opacity: 0; }
+    50% { opacity: .75; }
+    to { transform: translateY(248px); opacity: 0; }
+  }
+
+  #phantom-terminal-switch .terminal-dial {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: min(196px, calc(100% - 26px));
+    aspect-ratio: 1;
+  }
+
+  #phantom-terminal-switch .terminal-ticks,
+  #phantom-terminal-switch .terminal-arc {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    pointer-events: none;
+  }
+
+  #phantom-terminal-switch .terminal-ticks {
+    background: repeating-conic-gradient(#7f619a 0deg 1deg, transparent 1deg 7.5deg);
+    mask-image: radial-gradient(farthest-side, transparent calc(100% - 7px), #fff calc(100% - 6px));
+    opacity: .55;
+    transition: transform var(--terminal-duration) var(--terminal-ease), opacity 250ms ease;
+  }
+
+  #phantom-terminal-switch .terminal-arc {
+    inset: 8px;
+    background: conic-gradient(from -90deg, #8354ce 0deg, var(--terminal-purple) var(--terminal-degrees), transparent 0deg);
+    mask-image: radial-gradient(farthest-side, transparent calc(100% - 3px), #fff calc(100% - 2px));
+    transition: --terminal-degrees var(--terminal-duration) var(--terminal-ease);
+  }
+
+  #phantom-terminal-switch [data-phase="boot"] .terminal-arc { --terminal-degrees: 245deg; }
+  #phantom-terminal-switch [data-tunnel] .terminal-arc { --terminal-degrees: 360deg; }
+
+  #phantom-terminal-switch [data-phase="boot"] .terminal-ticks,
+  #phantom-terminal-switch [data-tunnel] .terminal-ticks {
+    transform: rotate(49deg);
+    opacity: .9;
+  }
+
+  #phantom-terminal-switch .terminal-button {
+    position: relative;
+    display: grid;
+    place-content: center;
+    justify-items: center;
+    gap: 9px;
+    width: calc(100% - 31px);
+    aspect-ratio: 1;
+    padding: 0 7px;
+    border: 1px solid #594472;
+    border-radius: 50%;
+    background: radial-gradient(circle at 50% 33%, #2d1c42, #140d1f 76%);
+    color: #e0c9fb;
+    font: inherit;
+    -webkit-tap-highlight-color: transparent;
+    transition: transform 130ms ease, box-shadow 380ms ease;
+  }
+
+  #phantom-terminal-switch .terminal-button:active { transform: scale(.96); }
+
+  #phantom-terminal-switch [data-tunnel] .terminal-button {
+    box-shadow: 0 0 36px #b78dff28, inset 0 0 24px #b78dff25;
+  }
+
+  #phantom-terminal-switch .terminal-power {
+    display: grid;
+    place-items: center;
+    width: 42px;
+    height: 42px;
+    color: var(--terminal-purple);
+    transition: filter 300ms ease;
+  }
+
+  #phantom-terminal-switch .terminal-power svg {
+    width: 100%;
+    height: 100%;
+    stroke-width: 1.7;
+  }
+
+  #phantom-terminal-switch [data-tunnel] .terminal-power {
+    filter: drop-shadow(0 0 8px #b78dff8c);
+  }
+
+  #phantom-terminal-switch .terminal-action {
+    font-size: 11px;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+  }
+
+  #phantom-terminal-switch .terminal-console {
+    min-height: 43px;
+    padding: 8px 10px;
+    margin-top: 10px;
+    border: 1px solid #30253e;
+    border-radius: 8px;
+    background: #0b0910;
+  }
+
+  #phantom-terminal-switch .terminal-line {
+    display: flex;
+    align-items: baseline;
+    gap: 7px;
+    color: #cdb4ec;
+  }
+
+  #phantom-terminal-switch .terminal-command { color: inherit; font: inherit; }
+  #phantom-terminal-switch .terminal-prompt { color: var(--terminal-purple); }
+
+  #phantom-terminal-switch .terminal-caret {
+    width: 7px;
+    height: 10px;
+    background: currentColor;
+    opacity: .58;
+  }
+
+  #phantom-terminal-switch .terminal-status {
+    margin: 3px 0 0;
+    color: #b9a8c9;
+  }
+
+  #phantom-terminal-switch [data-phase="on"] .terminal-line,
+  #phantom-terminal-switch [data-phase="on"] .terminal-status {
+    color: var(--terminal-mint);
+  }
+
+  #phantom-terminal-switch[data-rain="off"] .terminal-code-rain { display: none; }
+
+  @media (prefers-reduced-motion: reduce) {
+    #phantom-terminal-switch .terminal-vpn *,
+    #phantom-terminal-switch .terminal-vpn *::before {
+      transition: none !important;
+      animation: none !important;
+    }
+
+    #phantom-terminal-switch .terminal-button:active { transform: none; }
+  }
+</style>
+
+<script>
+  (() => {
+    const root = document.getElementById('phantom-terminal-switch');
+    const terminal = root.querySelector('.terminal-vpn');
+    const button = terminal.querySelector('.terminal-button');
+    const action = terminal.querySelector('.terminal-action');
+    const badge = terminal.querySelector('.terminal-badge');
+    const command = terminal.querySelector('.terminal-command');
+    const status = terminal.querySelector('.terminal-status');
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const settings = { duration: 650, rain: true };
+    const phases = {
+      off: ['Подключить', 'OFFLINE', 'tunnel.idle', 'VPN отключён'],
+      boot: ['Подключение…', 'BOOT', 'tunnel.init', 'Устанавливаем туннель…'],
+      verify: ['Отключить', 'VERIFY', 'route.check', 'Туннель запущен · проверка интернета'],
+      on: ['Отключить', 'ONLINE', 'route.ok', 'Интернет через VPN подтверждён'],
+      stop: ['Отключение…', 'STOP', 'tunnel.close', 'Закрываем туннель…'],
+    };
+    let phaseTimer;
+    let typing;
+
+    function setPhase(phase) {
+      terminal.dataset.phase = phase;
+      terminal.toggleAttribute('data-tunnel', phase === 'verify' || phase === 'on');
+      button.setAttribute('aria-disabled', String(phase === 'boot' || phase === 'stop'));
+      [action.textContent, badge.textContent, command.textContent, status.textContent] = phases[phase];
+
+      typing?.cancel();
+      if (!reducedMotion.matches) {
+        typing = command.animate(
+          [{ clipPath: 'inset(0 100% 0 0)' }, { clipPath: 'inset(0 0 0 0)' }],
+          { duration: 220, easing: 'steps(12, end)' },
+        );
+      }
+    }
+
+    button.addEventListener('click', () => {
+      if (button.getAttribute('aria-disabled') === 'true') return;
+      window.clearTimeout(phaseTimer);
+
+      const motionDuration = settings.duration;
+      if (terminal.dataset.phase === 'off') {
+        setPhase('boot');
+        phaseTimer = window.setTimeout(() => {
+          setPhase('verify');
+          phaseTimer = window.setTimeout(() => setPhase('on'), Math.max(560, motionDuration));
+        }, motionDuration + 150);
+      } else {
+        setPhase('stop');
+        phaseTimer = window.setTimeout(() => setPhase('off'), motionDuration + 150);
+      }
+    });
+
+    if (globalThis.Tweak) {
+      const tweak = new globalThis.Tweak({
+        container: terminal,
+        onChange: () => {
+          root.style.setProperty('--terminal-duration', `${settings.duration}ms`);
+          root.dataset.rain = settings.rain ? 'on' : 'off';
+        },
+      });
+      tweak.addSlider(settings, 'duration', { label: 'Длительность движения', min: 350, max: 1100, step: 50, unit: 'мс' });
+      tweak.addToggle(settings, 'rain', { label: 'Поток символов' });
+    }
+  })();
+</script>

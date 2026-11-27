@@ -148,7 +148,11 @@ class Subscriptions(private val context: Context, private val vault: Vault) {
         val c=vault.state.value
         for(s in c.subscriptions.filter { it.url.isNotBlank() }) {
             val hours=c.number("updateHours",12).coerceIn(1,168)
-            if(!dueOnly || System.currentTimeMillis()-s.updated>=hours*3600000L) runCatching { refresh(s.id) }
+            if (!dueOnly || System.currentTimeMillis() - s.updated >= hours * 3600000L) {
+                try { refresh(s.id) }
+                catch (e: CancellationException) { throw e }
+                catch (_: Exception) { /* Individual refresh errors are stored in the catalog. */ }
+            }
         }
     }
     fun schedule() {

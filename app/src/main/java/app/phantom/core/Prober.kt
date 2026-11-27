@@ -73,16 +73,30 @@ internal fun ConnectivityManager.probeNetwork(): Network? {
 }
 
 class Prober(private val vault: Vault, private val context: Context) {
+    internal data class Progress(
+        val pending: Set<String>,
+        val completed: Int,
+        val total: Int,
+        val initialLatencies: Map<String, Long>,
+    )
+
     private val batch = Mutex()
-    private val pending = MutableStateFlow<Set<String>>(emptySet())
+    private val activeBatch = MutableStateFlow<Progress?>(null)
     private val connectivity by lazy { context.getSystemService(ConnectivityManager::class.java) }
     private val probeWorkers by lazy {
         if (context.getSystemService(ActivityManager::class.java).isLowRamDevice) 1 else RemoteProbeClient.workerCount
     }
-    val checking = pending.asStateFlow()
+    internal val progress = activeBatch.asStateFlow()
 
     suspend fun test(servers: List<Server>) {
         batch.withLock { measure(servers, automatic = false) }
+    }
+
+    internal suspend fun testForAuto(excluded: Set<String>) = batch.withLock {
+        val catalog = vault.state.value
+        if (catalog.autoSelect && catalog.fastestServer(excluded) == null) {
+            measure(catalog.servers().filter { it.id !in excluded }.toList(), automatic = false)
+        }
     }
 
     internal suspend fun checkUnmeasuredProfiles() {
@@ -115,8 +129,9 @@ class Prober(private val vault: Vault, private val context: Context) {
         awaitClose { connectivity.unregisterNetworkCallback(callback) }
     }.distinctUntilChanged()
 
-    private fun unmeasuredProfiles(catalog: Catalog) = catalog.subscriptions.flatMap { it.servers }
+    private fun unmeasuredProfiles(catalog: Catalog) = catalog.servers()
         .filter { it.issue.isBlank() && it.testedAt == 0L }
+        .toList()
 
     private suspend fun checkPendingBatch(): Boolean = batch.withLock {
         if (connectivity.probeNetwork() == null) return@withLock false
@@ -130,14 +145,19 @@ class Prober(private val vault: Vault, private val context: Context) {
 
     private suspend fun measure(servers: List<Server>, automatic: Boolean): Boolean {
         val targets = servers.filter { it.issue.isBlank() }.distinctBy { it.id to it.config }
+        if (targets.isEmpty()) return false
         val catalog = vault.state.value
         val timeout = catalog.number("pingTimeout", 7).coerceIn(2, 60)
-        pending.value = targets.mapTo(mutableSetOf()) { it.id }
+        val initialLatencies = catalog.servers().distinctBy { it.id }
+            .mapNotNull { server -> server.successfulLatency?.let { server.id to it } }.toMap()
         val directSlots = Semaphore(4)
         val proxySlots = Channel<Int>(probeWorkers)
         repeat(probeWorkers) { proxySlots.trySend(it) }
+        val lastTargetIndex = targets.withIndex().associate { (index, server) -> server.id to index }
+        var progress = Progress(targets.mapTo(mutableSetOf()) { it.id }, 0, targets.size, initialLatencies)
         var recorded = false
         try {
+            activeBatch.value = progress
             for (group in targets.chunked(4)) {
                 if (automatic && connectivity.probeNetwork() == null) break
                 val results = coroutineScope {
@@ -158,11 +178,14 @@ class Prober(private val vault: Vault, private val context: Context) {
                     }) }
                     recorded = true
                 }
-                pending.value = pending.value - group.map { it.id }.toSet()
+                val count = progress.completed + group.size
+                val finishedIds = group.map { it.id }.filter { lastTargetIndex.getValue(it) < count }
+                progress = progress.copy(completed = count, pending = progress.pending - finishedIds.toSet())
+                activeBatch.value = progress
             }
         } finally {
             proxySlots.close()
-            pending.value = emptySet()
+            activeBatch.value = null
         }
         return recorded
     }
@@ -214,7 +237,7 @@ class Prober(private val vault: Vault, private val context: Context) {
     }
 
     private fun icmpTest(endpoint: ProbeEndpoint, timeout: Int): Long {
-        require(VpnRuntime.state.value.phase == Phase.OFF) { "ICMP-тест требует отключённого VPN" }
+        require(!VpnRuntime.state.value.tunnel) { "ICMP-тест требует отключённого VPN" }
         val process = ProcessBuilder("/system/bin/ping", "-c", "1", "-W", timeout.toString(), "--", endpoint.host)
             .redirectErrorStream(true).start()
         try {

@@ -1,0 +1,334 @@
+<div id="phantom-power-motion" class="viz-carousel viz-dotted-background" lang="ru"
+    aria-label="Варианты анимации кнопки Phantom VPN"
+    data-previous-label="Предыдущий вариант" data-next-label="Следующий вариант">
+  <section data-variant="Контур" aria-label="Контур">
+    <div class="phantom-preview" data-effect="contour" data-phase="off" aria-label="Контур кнопки">
+      <div class="phantom-wordmark">Phantom VPN</div>
+      <div class="phantom-stage">
+        <span class="phantom-halo" aria-hidden="true"></span>
+        <button type="button" class="phantom-power cursor-interaction" aria-describedby="phantom-contour-status">
+          <span class="phantom-content">
+            <span class="phantom-icon"><i data-lucide="power" aria-hidden="true"></i></span>
+            <span class="phantom-action">Подключить</span>
+          </span>
+          <span class="phantom-contour" aria-hidden="true"></span>
+        </button>
+      </div>
+      <p class="phantom-status" id="phantom-contour-status" aria-live="polite">VPN отключён</p>
+    </div>
+  </section>
+  <section data-variant="Импульс" aria-label="Импульс" hidden>
+    <div class="phantom-preview" data-effect="pulse" data-phase="off" aria-label="Импульс от кнопки">
+      <div class="phantom-wordmark">Phantom VPN</div>
+      <div class="phantom-stage">
+        <span class="phantom-halo" aria-hidden="true"></span>
+        <span class="phantom-echo" aria-hidden="true"></span>
+        <button type="button" class="phantom-power cursor-interaction" aria-describedby="phantom-pulse-status">
+          <span class="phantom-content">
+            <span class="phantom-icon"><i data-lucide="power" aria-hidden="true"></i></span>
+            <span class="phantom-action">Подключить</span>
+          </span>
+        </button>
+      </div>
+      <p class="phantom-status" id="phantom-pulse-status" aria-live="polite">VPN отключён</p>
+    </div>
+  </section>
+  <section data-variant="Диафрагма" aria-label="Диафрагма" hidden>
+    <div class="phantom-preview" data-effect="iris" data-phase="off" aria-label="Заливка кнопки">
+      <div class="phantom-wordmark">Phantom VPN</div>
+      <div class="phantom-stage">
+        <span class="phantom-halo" aria-hidden="true"></span>
+        <button type="button" class="phantom-power cursor-interaction" aria-describedby="phantom-iris-status">
+          <span class="phantom-iris" aria-hidden="true"></span>
+          <span class="phantom-content">
+            <span class="phantom-icon"><i data-lucide="power" aria-hidden="true"></i></span>
+            <span class="phantom-action">Подключить</span>
+          </span>
+        </button>
+      </div>
+      <p class="phantom-status" id="phantom-iris-status" aria-live="polite">VPN отключён</p>
+    </div>
+  </section>
+</div>
+
+<style>
+  @property --phantom-arc {
+    syntax: '<angle>';
+    inherits: false;
+    initial-value: 0deg;
+  }
+
+  #phantom-power-motion > section[data-variant]:not([hidden]) {
+    display: grid;
+    justify-items: center;
+    padding: 16px 10px;
+  }
+
+  #phantom-power-motion .phantom-preview {
+    color-scheme: dark;
+    --phantom-accent: #ad81ff;
+    --phantom-motion: 520ms;
+    --phantom-ease: cubic-bezier(.2, .72, .26, 1);
+    --phantom-diameter: 168px;
+    box-sizing: border-box;
+    display: grid;
+    justify-items: center;
+    align-content: center;
+    width: min(100%, 368px);
+    min-height: 314px;
+    padding: 20px 12px;
+    border: 1px solid #332644;
+    border-radius: 24px;
+    background: radial-gradient(ellipse at 50% 34%, #1b1229, #100c18 75%);
+    color: #f0e8ff;
+    font: 500 14px/1.4 system-ui, sans-serif;
+  }
+
+  #phantom-power-motion .phantom-wordmark {
+    color: #cfc3e0;
+    letter-spacing: .08em;
+  }
+
+  #phantom-power-motion .phantom-stage {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: min(100%, 244px);
+    height: 206px;
+    isolation: isolate;
+  }
+
+  #phantom-power-motion .phantom-halo {
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse closest-side, #ad81ff42, transparent);
+    opacity: .2;
+    transition: opacity var(--phantom-motion) ease;
+    pointer-events: none;
+  }
+
+  #phantom-power-motion .phantom-preview[data-connected] .phantom-halo {
+    opacity: 1;
+  }
+
+  #phantom-power-motion .phantom-power {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: var(--phantom-diameter);
+    aspect-ratio: 1;
+    padding: 0;
+    border: 1.5px solid #6c567f;
+    border-radius: 50%;
+    background: linear-gradient(165deg, #251936, #100b18 80%);
+    color: #b19dc8;
+    font: inherit;
+    transition: border-color var(--phantom-motion) ease, color 180ms ease,
+      transform 180ms var(--phantom-ease), box-shadow var(--phantom-motion) ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  #phantom-power-motion .phantom-power:active,
+  #phantom-power-motion [data-effect="pulse"][data-phase="starting"] .phantom-power {
+    transform: scale(.955);
+  }
+
+  #phantom-power-motion .phantom-preview[data-connected] .phantom-power {
+    color: #e6d4ff;
+    border-color: var(--phantom-accent);
+    box-shadow: 0 0 26px #ad81ff32;
+  }
+
+  #phantom-power-motion .phantom-content {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    justify-items: center;
+    gap: 10px;
+    pointer-events: none;
+  }
+
+  #phantom-power-motion .phantom-icon {
+    display: grid;
+    place-items: center;
+    width: 48px;
+    height: 48px;
+  }
+
+  #phantom-power-motion .phantom-icon svg {
+    width: 100%;
+    height: 100%;
+    stroke-width: 1.7;
+  }
+
+  #phantom-power-motion .phantom-action {
+    font-size: 11px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+  }
+
+  #phantom-power-motion .phantom-status {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 20px;
+    margin: 4px 0 0;
+    color: #c6b5da;
+    font-size: 13px;
+    text-align: center;
+  }
+
+  #phantom-power-motion .phantom-status::before {
+    content: '';
+    flex: 0 0 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+
+  #phantom-power-motion [data-phase="tunnel"] .phantom-status {
+    color: #d7bbff;
+  }
+
+  #phantom-power-motion [data-phase="online"] .phantom-status {
+    color: #78e3af;
+  }
+
+  #phantom-power-motion .phantom-contour {
+    position: absolute;
+    inset: -1.5px;
+    border-radius: inherit;
+    background: conic-gradient(#e4d0ff 0deg, var(--phantom-accent) var(--phantom-arc), transparent 0deg);
+    mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #fff calc(100% - 1px));
+    transition: --phantom-arc var(--phantom-motion) var(--phantom-ease);
+    pointer-events: none;
+  }
+
+  #phantom-power-motion [data-effect="contour"][data-connected] .phantom-power {
+    border-color: #6c567f;
+  }
+
+  #phantom-power-motion [data-phase="starting"] .phantom-contour {
+    --phantom-arc: 225deg;
+  }
+
+  #phantom-power-motion [data-connected] .phantom-contour {
+    --phantom-arc: 360deg;
+  }
+
+  #phantom-power-motion .phantom-echo {
+    position: absolute;
+    width: var(--phantom-diameter);
+    aspect-ratio: 1;
+    box-sizing: border-box;
+    border: 2px solid var(--phantom-accent);
+    border-radius: 50%;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  #phantom-power-motion [data-connected] .phantom-echo {
+    animation: phantom-echo-out var(--phantom-motion) ease-out both;
+  }
+
+  #phantom-power-motion [data-phase="stopping"] .phantom-echo {
+    animation: phantom-echo-in var(--phantom-motion) ease-in both;
+  }
+
+  @keyframes phantom-echo-out {
+    from { opacity: .9; transform: scale(1.015); }
+    to { opacity: 0; transform: scale(1.32); }
+  }
+
+  @keyframes phantom-echo-in {
+    from { opacity: .66; transform: scale(1.31); }
+    to { opacity: 0; transform: scale(1.015); }
+  }
+
+  #phantom-power-motion .phantom-iris {
+    position: absolute;
+    inset: 3px;
+    border-radius: inherit;
+    background: radial-gradient(circle at 50% 40%, #664493, #35224f 64%, #251734);
+    clip-path: circle(0 at 50% 42%);
+    transition: clip-path var(--phantom-motion) var(--phantom-ease);
+    pointer-events: none;
+  }
+
+  #phantom-power-motion [data-phase="starting"] .phantom-iris {
+    clip-path: circle(15% at 50% 42%);
+  }
+
+  #phantom-power-motion [data-connected] .phantom-iris {
+    clip-path: circle(60% at 50% 42%);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    #phantom-power-motion .phantom-preview * {
+      transition: none !important;
+      animation: none !important;
+    }
+
+    #phantom-power-motion .phantom-power {
+      transform: none !important;
+    }
+  }
+</style>
+
+<script>
+  (() => {
+    const root = document.getElementById('phantom-power-motion');
+    const labels = {
+      off: ['Подключить', 'VPN отключён'],
+      starting: ['Подключение…', 'Устанавливаем туннель'],
+      tunnel: ['Отключить', 'Туннель запущен · проверка интернета'],
+      online: ['Отключить', 'Интернет через VPN подтверждён'],
+      stopping: ['Отключение…', 'Закрываем туннель'],
+    };
+
+    for (const preview of root.querySelectorAll('.phantom-preview')) {
+      const button = preview.querySelector('.phantom-power');
+      const action = preview.querySelector('.phantom-action');
+      const status = preview.querySelector('.phantom-status');
+      const settings = { duration: 520 };
+      let checkTimer;
+
+      function setPhase(phase) {
+        const connected = phase === 'tunnel' || phase === 'online';
+        const busy = phase === 'starting' || phase === 'stopping';
+        preview.dataset.phase = phase;
+        preview.toggleAttribute('data-connected', connected);
+        button.setAttribute('aria-disabled', String(busy));
+        [action.textContent, status.textContent] = labels[phase];
+      }
+
+      button.addEventListener('click', () => {
+        if (button.getAttribute('aria-disabled') === 'true') return;
+
+        if (preview.dataset.phase === 'off') {
+          setPhase('starting');
+          window.setTimeout(() => {
+            setPhase('tunnel');
+            checkTimer = window.setTimeout(() => setPhase('online'), 640);
+          }, 740);
+        } else {
+          window.clearTimeout(checkTimer);
+          setPhase('stopping');
+          window.setTimeout(() => setPhase('off'), settings.duration);
+        }
+      });
+
+      if (globalThis.Tweak) {
+        const tweak = new globalThis.Tweak({
+          container: preview,
+          onChange: () => preview.style.setProperty('--phantom-motion', `${settings.duration}ms`),
+        });
+        tweak.addSlider(settings, 'duration', {
+          label: 'Длительность движения', min: 250, max: 800, step: 10, unit: 'мс',
+          reference: '--phantom-motion',
+        });
+      }
+    }
+  })();
+</script>

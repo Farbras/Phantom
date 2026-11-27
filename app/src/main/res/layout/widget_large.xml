@@ -1,0 +1,178 @@
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:background="@drawable/widget_frame">
+
+        <include
+            layout="@layout/widget_rain"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_alignStart="@id/widget_content"
+            android:layout_alignTop="@id/widget_content"
+            android:layout_alignEnd="@id/widget_content"
+            android:layout_alignBottom="@id/widget_content"
+            android:layout_margin="3dp" />
+
+        <LinearLayout
+            android:id="@+id/widget_content"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingHorizontal="14dp"
+            android:paddingVertical="12dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@id/widget_command"
+                    style="@style/PhantomWidgetText"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="5dp"
+                    android:layout_weight="1"
+                    android:text="@string/widget_prompt"
+                    android:textColor="@color/widget_muted" />
+
+                <TextView
+                    android:id="@id/widget_status"
+                    style="@style/PhantomWidgetText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/widget_off"
+                    android:textColor="@color/widget_muted" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/widget_location_row"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="5dp"
+                android:background="@drawable/widget_highlight"
+                android:focusable="true"
+                android:gravity="center_vertical"
+                android:minHeight="48dp"
+                android:orientation="horizontal">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="6dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@id/widget_location"
+                        style="@style/PhantomWidgetText"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:importantForAccessibility="no"
+                        android:text="@string/widget_empty_value"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/widget_server"
+                        style="@style/PhantomWidgetCaption"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="3dp"
+                        android:importantForAccessibility="no"
+                        android:text="@string/widget_empty_value"
+                        android:textColor="@color/widget_muted" />
+                </LinearLayout>
+
+                <TextView
+                    style="@style/PhantomWidgetCaption"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:importantForAccessibility="no"
+                    android:text="@string/widget_location_arrow"
+                    android:textColor="@color/widget_muted"
+                    android:textSize="18sp" />
+            </LinearLayout>
+
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginTop="5dp"
+                android:layout_marginBottom="10dp"
+                android:background="@color/widget_divider"
+                android:importantForAccessibility="no" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="8dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        style="@style/PhantomWidgetCaption"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/widget_protocol_label"
+                        android:textColor="@color/widget_muted" />
+
+                    <TextView
+                        android:id="@+id/widget_protocol"
+                        style="@style/PhantomWidgetText"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="3dp"
+                        android:text="@string/widget_empty_value" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:gravity="end"
+                    android:orientation="vertical">
+
+                    <TextView
+                        style="@style/PhantomWidgetCaption"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/widget_duration_label"
+                        android:textColor="@color/widget_muted" />
+
+                    <Chronometer
+                        android:id="@+id/widget_timer"
+                        style="@style/PhantomWidgetText"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="3dp"
+                        android:visibility="gone" />
+
+                    <TextView
+                        android:id="@+id/widget_no_timer"
+                        style="@style/PhantomWidgetText"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="3dp"
+                        android:text="@string/widget_empty_value" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <Button
+                android:id="@id/widget_power"
+                style="@style/PhantomWidgetButton"
+                android:layout_width="wrap_content"
+                android:layout_height="34dp"
+                android:layout_marginTop="12dp"
+                android:text="@string/widget_connect" />
+        </LinearLayout>
+    </RelativeLayout>
+</FrameLayout>

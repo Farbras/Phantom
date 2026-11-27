@@ -230,6 +230,7 @@ private val VpnAction.command get() = when(this) {
 private val VpnStep.label get() = when(this) {
     VpnStep.VPN_PERMISSION -> "Waiting for Android permissions..."
     VpnStep.LOADING_PROFILE -> "Loading VPN profile..."
+    VpnStep.TESTING_SERVERS -> "Checking server latency..."
     VpnStep.VALIDATING_CONFIG -> "Validating Xray config..."
     VpnStep.STARTING_XRAY -> "Starting Xray core..."
     VpnStep.CREATING_TUN -> "Creating TUN interface..."
@@ -246,6 +247,7 @@ private val VpnStep.label get() = when(this) {
     VpnStep.DISCONNECTED -> "[ OK ] VPN disconnected"
     VpnStep.PERMISSION_DENIED -> "[ ERROR ] VPN permission denied"
     VpnStep.NO_PROFILE -> "[ ERROR ] Select a VPN profile"
+    VpnStep.NO_AUTO_SERVER -> "[ ERROR ] No server responded"
     VpnStep.CONNECT_FAILED -> "[ ERROR ] VPN connection failed"
     VpnStep.DISCONNECT_FAILED -> "[ ERROR ] VPN disconnection failed"
     VpnStep.COUNTERS_FAILED -> "[ ERROR ] Traffic counters could not be saved"
@@ -271,7 +273,7 @@ private fun terminalStatus(phase: Phase,routeUnconfirmed: Boolean,latest: VpnOpe
             step==VpnStep.INTERRUPTED -> "Служба VPN остановлена" to shellError
             else -> "VPN отключён" to shellMuted
         }
-        Phase.STARTING -> "Подключение…" to shellWarning
+        Phase.STARTING -> (if (step == VpnStep.TESTING_SERVERS) "Проверка задержки…" else "Подключение…") to shellWarning
         Phase.TUNNEL -> if(routeUnconfirmed) "Маршрут через VPN не подтверждён" to shellWarning else "Проверка маршрута…" to shellWarning
         Phase.ONLINE -> "VPN подключён" to shellMint
         Phase.WAITING -> "Ожидание Wi-Fi или мобильной сети" to shellWarning

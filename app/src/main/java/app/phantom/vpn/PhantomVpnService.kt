@@ -155,21 +155,22 @@ class PhantomVpnService: VpnService() {
         getSystemService(NotificationManager::class.java).notify(1,notification(message))
         PhantomTile.refresh(this)
     }
-private suspend fun connect(operation: Long?, request: Long) {
+    private suspend fun connect(operation: Long?, request: Long) {
         if (!active || request != generation.value) return
         if (prepare(this) != null) {
             fail(IllegalStateException("Разрешение Android на VPN не предоставлено"), operation, VpnStep.PERMISSION_DENIED)
             return
         }
         publish(Phase.STARTING, "Подключение…", operation, VpnStep.LOADING_PROFILE)
-        val catalog = app.vault.state.value
-        val server = catalog.selectedServer()
-        if (server == null) {
+        var catalog = app.vault.state.value
+        if (!catalog.autoSelect && catalog.selectedServer() == null) {
             fail(IllegalStateException("Сначала выберите поддерживаемый сервер"), operation, VpnStep.NO_PROFILE)
             return
         }
-        VpnRuntime.mutable.update { it.copy(serverId = server.id, latency = null, online = false) }
-        VpnRuntime.logLevel = catalog.setting("logLevel")
+        if (catalog.autoSelect && catalog.servers().none { it.issue.isBlank() && it.id !in failedServers }) {
+            finishSession(operation, request, noAutoServer = true)
+            return
+        }
         stopPolling()
         val network = selectPhysical()
         physical = network
@@ -179,10 +180,34 @@ private suspend fun connect(operation: Long?, request: Long) {
             return
         }
 
+        if (catalog.autoSelect && catalog.fastestServer(failedServers) == null) {
+            if (coreRunning && catalog.setting("pingMethod") == "ICMP") {
+                check(stopNative()) { "Не удалось остановить Xray" }
+            }
+            publish(Phase.STARTING, "Проверка серверов для режима «Авто»", operation, VpnStep.TESTING_SERVERS)
+            coroutineScope {
+                val probing = launch { app.prober.testForAuto(failedServers) }
+                val cancelOnNewCommand = launch {
+                    generation.first { it != request }
+                    probing.cancel()
+                }
+                try { probing.join() } finally { cancelOnNewCommand.cancel() }
+            }
+            if (!active || request != generation.value) return
+            catalog = app.vault.state.value
+        }
+        val server = if (catalog.autoSelect) catalog.fastestServer(failedServers) else catalog.selectedServer()
+        if (server == null) {
+            if (catalog.autoSelect) finishSession(operation, request, noAutoServer = true)
+            else fail(IllegalStateException("Сначала выберите поддерживаемый сервер"), operation, VpnStep.NO_PROFILE)
+            return
+        }
+        VpnRuntime.logLevel = catalog.setting("logLevel")
+
         val control = XrayLoopback()
         VpnRuntime.step(operation, VpnStep.VALIDATING_CONFIG)
         val started = SystemClock.elapsedRealtime()
-        synchronized(nativeLock) {
+        val config = synchronized(nativeLock) {
             if (destroyed || !active || request != generation.value) return
             check(stopNative()) { "Не удалось остановить Xray" }
             VpnRuntime.step(operation, VpnStep.CREATING_TUN)
@@ -199,17 +224,22 @@ private suspend fun connect(operation: Long?, request: Long) {
             VpnRuntime.step(operation, VpnStep.STARTING_XRAY)
             SocketProtection.attach(this)
             LibXray.setDNS(SocketProtection, "1.1.1.1:53")
-            Core.start(config)
+            Core.start(config.json)
             coreRunning = Core.running()
             check(coreRunning && SystemClock.elapsedRealtime() - started < 20_000) { "Не удалось подключиться к выбранному серверу" }
+            config
         }
         if (!active || request != generation.value) return
         if (startedAt == 0L) startedAt = SystemClock.elapsedRealtime()
         previousTx = 0; previousRx = 0
-        VpnRuntime.mutable.update { it.copy(connectedAt = startedAt, txSpeed = 0, rxSpeed = 0) }
+        val protocol = config.protocolsByTag.values.toSet().singleOrNull().orEmpty()
+        VpnRuntime.mutable.update {
+            it.copy(serverId = server.id, serverName = server.name, serverProtocol = protocol,
+                connectedAt = startedAt, latency = null, txSpeed = 0, rxSpeed = 0)
+        }
         publish(Phase.TUNNEL, "Туннель запущен · проверка интернета", operation, VpnStep.CHECKING_ROUTE)
         VpnRuntime.log("TUN и Xray запущены")
-        startPolling(control, catalog, server, operation, request)
+        startPolling(control, catalog, server, config.protocolsByTag, operation, request)
     }
 
     private fun applyAppFilter(builder: Builder, catalog: Catalog) {
@@ -230,14 +260,16 @@ private suspend fun connect(operation: Long?, request: Long) {
         }
     }
 
-    private fun startPolling(control: XrayLoopback, catalog: Catalog, server: Server, operation: Long?, request: Long) {
+    private fun startPolling(control: XrayLoopback, catalog: Catalog, server: Server,
+        protocolsByTag: Map<String, String>, operation: Long?, request: Long) {
         statsJob = scope.launch {
             var measuredAt = SystemClock.elapsedRealtime()
             var ticks = 0
             while (active && request == generation.value) {
                 delay(2_000)
                 try {
-                    val (tx, rx) = control.counters()
+                    val (tx, rx, usedOutbounds) = control.counters()
+                    val protocol = protocolsByTag.filterKeys { it in usedOutbounds }.values.distinct().joinToString(" / ")
                     val deltaTx = (tx - previousTx).coerceAtLeast(0)
                     val deltaRx = (rx - previousRx).coerceAtLeast(0)
                     accumulatedTx += deltaTx
@@ -245,7 +277,8 @@ private suspend fun connect(operation: Long?, request: Long) {
                     val now = SystemClock.elapsedRealtime()
                     val interval = (now - measuredAt).coerceAtLeast(1)
                     VpnRuntime.mutable.update { it.copy(tx = accumulatedTx, rx = accumulatedRx,
-                        txSpeed = deltaTx * 1000 / interval, rxSpeed = deltaRx * 1000 / interval) }
+                        txSpeed = deltaTx * 1000 / interval, rxSpeed = deltaRx * 1000 / interval,
+                        serverProtocol = protocol.ifBlank { it.serverProtocol }) }
                     measuredAt = now
                     previousTx = tx; previousRx = rx
                     if (++ticks % 5 == 0) saveTraffic()
@@ -321,8 +354,9 @@ private suspend fun connect(operation: Long?, request: Long) {
             return
         }
         val catalog = app.vault.state.value
-        val current = catalog.selectedServer() ?: return
-        if (current.id != VpnRuntime.state.value.serverId) return
+        val currentId = VpnRuntime.state.value.serverId
+        if (!catalog.autoSelect && catalog.selected != currentId) return
+        val current = catalog.server(currentId) ?: return
         val now = SystemClock.elapsedRealtime()
         if (switchWindow == 0L || now - switchWindow > 600_000) {
             switchWindow = now
@@ -331,6 +365,10 @@ private suspend fun connect(operation: Long?, request: Long) {
         }
         failedServers.add(current.id)
         rememberWorking(current, false)
+        if (catalog.autoSelect) {
+            if (waitToSwitch(operation, request) && app.vault.state.value.autoSelect) connect(operation, request)
+            return
+        }
         val subscription = catalog.subscriptions.firstOrNull { sub -> sub.servers.any { it.id == current.id } }
         val choices = catalog.subscriptions.flatMap { it.servers }.filter { it.issue.isBlank() && it.id !in failedServers }
         val providerChoices = choices.filter { it in subscription?.servers.orEmpty() }
@@ -340,19 +378,28 @@ private suspend fun connect(operation: Long?, request: Long) {
             ?: bestCandidate(providerChoices.filter { it.locationGroup() == current.locationGroup() }, catalog)
             ?: bestCandidate(providerChoices, catalog)
             ?: bestCandidate(choices, catalog)
-        if (switches >= switchBackoff.size || next == null) {
+        if (next == null) {
             VpnRuntime.step(operation, VpnStep.CONNECT_FAILED)
             return
         }
-        val backoff = switchBackoff[switches++]
-        if (withTimeoutOrNull(backoff) { generation.first { it != request } } != null) return
-        if (!active || request != generation.value) return
+        if (!waitToSwitch(operation, request)) return
         app.vault.update { latest ->
-            if (latest.selected == current.id && latest.subscriptions.any { sub -> sub.servers.any { it.id == next.id } })
+            if (!latest.autoSelect && latest.selected == current.id && latest.server(next.id) != null)
                 latest.copy(selected = next.id)
             else latest
         }
-        if (app.vault.state.value.selected == next.id) connect(operation, request)
+        val latest = app.vault.state.value
+        if (!latest.autoSelect && latest.selected == next.id) connect(operation, request)
+    }
+
+    private suspend fun waitToSwitch(operation: Long?, request: Long): Boolean {
+        if (switches >= switchBackoff.size) {
+            VpnRuntime.step(operation, VpnStep.CONNECT_FAILED)
+            return false
+        }
+        val backoff = switchBackoff[switches++]
+        if (withTimeoutOrNull(backoff) { generation.first { it != request } } != null) return false
+        return active && request == generation.value
     }
 
     private fun bestCandidate(choices: List<Server>, catalog: Catalog): Server? =
@@ -401,10 +448,15 @@ private suspend fun connect(operation: Long?, request: Long) {
 
 
     private suspend fun disconnect(operation: Long, request: Long) {
-        stopPolling()
         publish(Phase.STOPPING,"Отключение…",operation)
-        val nativeStopped=stopNative(operation)
-        VpnRuntime.step(operation,VpnStep.SAVING_COUNTERS)
+        finishSession(operation, request)
+    }
+
+    private suspend fun finishSession(operation: Long?, request: Long, noAutoServer: Boolean = false) {
+        stopPolling()
+        val stopOperation = operation.takeUnless { noAutoServer }
+        val nativeStopped=stopNative(stopOperation)
+        VpnRuntime.step(stopOperation,VpnStep.SAVING_COUNTERS)
         val saved=try { saveTraffic();true }
         catch(e: CancellationException) { throw e }
         catch(e: Exception) { VpnRuntime.error(e);false }
@@ -412,11 +464,21 @@ private suspend fun connect(operation: Long?, request: Long) {
         accumulatedTx=0;accumulatedRx=0;savedTx=0;savedRx=0;startedAt=0
         withContext(Dispatchers.Main.immediate) {
             if (request == generation.value) {
+                active=false
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 cleanStop=true
                 stopSelf()
             }
-            VpnRuntime.updatePhase(operation,if(saved) null else VpnStep.COUNTERS_FAILED) { VpnSnapshot() }
+            if (!noAutoServer || request == generation.value) {
+                val step = when {
+                    noAutoServer -> VpnStep.NO_AUTO_SERVER
+                    !saved -> VpnStep.COUNTERS_FAILED
+                    else -> null
+                }
+                VpnRuntime.updatePhase(operation, step) {
+                    if (noAutoServer) VpnSnapshot(message = NO_AUTO_SERVER_MESSAGE) else VpnSnapshot()
+                }
+            }
             PhantomTile.refresh(this@PhantomVpnService)
         }
     }

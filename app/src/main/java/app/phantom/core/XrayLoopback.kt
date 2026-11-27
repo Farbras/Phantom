@@ -41,7 +41,9 @@ internal class XrayLoopback {
         return (System.nanoTime() - started) / 1_000_000
     }
 
-    suspend fun counters(): Pair<Long, Long> = throughSocks(ConfigBuilder.METRICS_HOST, 80, 2000) { socket ->
+    data class Counters(val tx: Long, val rx: Long, val usedOutbounds: Set<String>)
+
+    suspend fun counters(): Counters = throughSocks(ConfigBuilder.METRICS_HOST, 80, 2000) { socket ->
         sendHttp(socket, "GET", "/debug/vars", ConfigBuilder.METRICS_HOST)
         val input = BufferedInputStream(socket.inputStream)
         check(headerLine(input).startsWith("HTTP/1.1 200 ")) { "Счётчики Xray недоступны" }
@@ -55,7 +57,15 @@ internal class XrayLoopback {
                 val counters = if (outbounds.length() > 0) {
                     outbounds.keys().asSequence().mapNotNull(outbounds::optJSONObject).toList()
                 } else listOfNotNull(stats.optJSONObject("inbound")?.optJSONObject(ConfigBuilder.TUN_TAG))
-                return@throughSocks counters.sumOf { it.optLong("uplink") } to counters.sumOf { it.optLong("downlink") }
+                val usedOutbounds = outbounds.keys().asSequence().filter { tag ->
+                    val counter = outbounds.optJSONObject(tag)
+                    counter != null && (counter.optLong("uplink") > 0 || counter.optLong("downlink") > 0)
+                }.toSet()
+                return@throughSocks Counters(
+                    counters.sumOf { it.optLong("uplink") },
+                    counters.sumOf { it.optLong("downlink") },
+                    usedOutbounds,
+                )
             }
             if (line.equals("Transfer-Encoding: chunked", ignoreCase = true)) chunked = true
         }

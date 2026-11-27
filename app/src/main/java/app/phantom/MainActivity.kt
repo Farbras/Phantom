@@ -28,6 +28,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class MainActivity: ComponentActivity() {
+    private var openLocations by mutableStateOf(false)
     private var incoming by mutableStateOf<String?>(null)
     private var exportText=""
     private var externalMessage by mutableStateOf("")
@@ -64,8 +65,10 @@ class MainActivity: ComponentActivity() {
             navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
         )
         incoming=intent.dataString
+        handleLocationIntent(intent)
         setContent {
             PhantomRoot(application as PhantomApp,incoming,{ incoming=null },externalMessage,{ externalMessage="" },
+                openLocations=openLocations,consumeLocations={ openLocations=false },
                 onConnect=::requestVpn,onFile={ importFile.launch(arrayOf("*/*")) },
                 onQr={ scanner.launch(ScanOptions().setDesiredBarcodeFormats(ScanOptions.QR_CODE).setPrompt("Отсканируйте конфигурацию или URL подписки").setBeepEnabled(false).setOrientationLocked(false)) },
                 onClipboard={ (getSystemService(ClipboardManager::class.java).primaryClip?.getItemAt(0)?.coerceToText(this)?.toString()).also { if(it.isNullOrBlank()) externalMessage="Буфер обмена пуст" else incoming=it } },
@@ -77,7 +80,17 @@ class MainActivity: ComponentActivity() {
         vpnRequest?.let { outState.putLong("vpnRequest",it) }
         super.onSaveInstanceState(outState)
     }
-    override fun onNewIntent(intent: Intent) { super.onNewIntent(intent);setIntent(intent);incoming=intent.dataString;handleConnectIntent(intent) }
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        incoming=intent.dataString
+        handleLocationIntent(intent)
+        handleConnectIntent(intent)
+    }
+
+    private fun handleLocationIntent(intent: Intent) {
+        if (intent.action == ACTION_PICK_LOCATION) openLocations = true
+    }
     private fun handleConnectIntent(intent: Intent) {
         if(intent.getBooleanExtra("connect",false)) {
             intent.removeExtra("connect")
@@ -117,5 +130,9 @@ class MainActivity: ComponentActivity() {
         if(operation!=VpnRuntime.pendingConnectId()) return
         VpnRuntime.step(operation,step)
         externalMessage=message
+    }
+
+    companion object {
+        internal const val ACTION_PICK_LOCATION = "app.phantom.PICK_LOCATION"
     }
 }

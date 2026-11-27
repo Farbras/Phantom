@@ -1,0 +1,19 @@
+<ViewFlipper xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_rain"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:animateFirstView="false"
+    android:importantForAccessibility="noHideDescendants"
+    android:inAnimation="@anim/widget_rain_show"
+    android:measureAllChildren="false"
+    android:outAnimation="@anim/widget_rain_fade">
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <FrameLayout
+        android:id="@+id/widget_rain_placeholder"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+</ViewFlipper>

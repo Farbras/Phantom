@@ -44,7 +44,7 @@ class ConfigurationTest {
     }
     @Test fun directTunnelUsesOnlyTheRuntimeDescriptorAndRestrictsMetricsToThePrivateSocksInbound() {
         val profile = JSONObject(server().config).put("env", JSONObject().put("xray.tun.fd", "99"))
-        val built = JSONObject(ConfigBuilder.buildTunnel(server().copy(config = profile.toString()), Catalog(), "assets", 41, XrayLoopback()))
+        val built = JSONObject(ConfigBuilder.buildTunnel(server().copy(config = profile.toString()), Catalog(), "assets", 41, XrayLoopback()).json)
         assertEquals("41", built.getJSONObject("env").getString("xray.tun.fd"))
         val inbounds = built.getJSONArray("inbounds").objects()
         val tun = inbounds.single { it.getString("protocol") == "tun" }

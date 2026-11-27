@@ -4,6 +4,7 @@ import android.app.Application
 import app.phantom.core.Prober
 import app.phantom.data.Subscriptions
 import app.phantom.data.Vault
+import app.phantom.widget.PhantomWidgets
 import kotlinx.coroutines.*
 import java.io.File
 
@@ -19,6 +20,7 @@ class PhantomApp: Application() {
         if (getProcessName() != packageName) return // Probe processes never open the vault.
         vault=Vault(this);subscriptions=Subscriptions(this,vault)
         prober = Prober(vault, this)
+        PhantomWidgets.observe(this)
         scope.launch {
             try {
                 vault.load()

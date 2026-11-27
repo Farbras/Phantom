@@ -1,0 +1,280 @@
+<div id="phantom-linux-terminal" class="viz-dotted-background" lang="ru">
+  <section class="linux-window" data-state="off" aria-label="Терминал Phantom VPN">
+    <header class="linux-titlebar">
+      <span class="linux-terminal-icon" aria-hidden="true">&gt;_</span>
+      <span>Phantom VPN <span class="linux-title-divider">/</span> bash</span>
+    </header>
+
+    <div class="linux-transcript" lang="en" aria-label="Command history">
+      <div class="linux-command linux-active-prompt">
+        <span class="linux-prompt"><span>phantom@linux</span>:<span>~</span>$</span>
+        <span class="linux-entry"><code class="linux-input"></code><span class="linux-cursor" aria-hidden="true"></span></span>
+      </div>
+    </div>
+
+    <footer class="linux-toolbar">
+      <p class="linux-status" role="status">VPN отключён</p>
+      <button class="linux-switch cursor-interaction" type="button">Подключить</button>
+    </footer>
+  </section>
+</div>
+
+<style>
+  #phantom-linux-terminal {
+    display: grid;
+    justify-items: center;
+    padding: 12px;
+  }
+
+  #phantom-linux-terminal .linux-window {
+    --shell-mint: #a6e3a1;
+    --shell-muted: #ae9eb7;
+    --shell-character-delay: 40ms;
+    color-scheme: dark;
+    box-sizing: border-box;
+    display: grid;
+    width: min(100%, 490px);
+    border: 1px solid #4b3853;
+    border-radius: 15px;
+    background: #1a111d;
+    color: #eee2ef;
+    font: 400 12px/1.65 'Cascadia Mono', 'DejaVu Sans Mono', Consolas, monospace;
+    box-shadow: 0 12px 34px #1208182e;
+  }
+
+  #phantom-linux-terminal .linux-titlebar {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 8px 12px;
+    border-bottom: 1px solid #47324b;
+    border-radius: 14px 14px 0 0;
+    background: #2d1e31;
+    font-weight: 500;
+  }
+
+  #phantom-linux-terminal .linux-terminal-icon {
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 20px;
+    border: 1px solid #644d68;
+    border-radius: 4px;
+    background: #1b121e;
+    color: var(--shell-mint);
+  }
+
+  #phantom-linux-terminal .linux-title-divider { color: var(--shell-muted); }
+
+  #phantom-linux-terminal .linux-transcript {
+    --shell-visible-lines: 17;
+    box-sizing: content-box;
+    min-width: 0;
+    min-height: calc(var(--shell-visible-lines) * 1.72em);
+    padding: 14px 12px;
+    background: #1b0f1e;
+    line-height: 1.72;
+  }
+
+  #phantom-linux-terminal .linux-command {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    column-gap: .65ch;
+  }
+
+  #phantom-linux-terminal .linux-prompt { white-space: nowrap; }
+  #phantom-linux-terminal .linux-prompt span:first-child { color: var(--shell-mint); }
+  #phantom-linux-terminal .linux-prompt span:last-child { color: #d0b3f0; }
+  #phantom-linux-terminal .linux-entry { white-space: nowrap; }
+
+  #phantom-linux-terminal .linux-input {
+    padding: 0;
+    background: transparent;
+    color: #f3e9f4;
+    font: inherit;
+  }
+
+  #phantom-linux-terminal .linux-cursor {
+    display: none;
+    width: .64ch;
+    height: 1em;
+    margin-left: 1px;
+    vertical-align: -.14em;
+    background: #dac9e4;
+  }
+
+  #phantom-linux-terminal .linux-active-prompt .linux-cursor { display: inline-block; }
+
+  #phantom-linux-terminal :is([data-state="off"], [data-state="on"]) .linux-cursor {
+    animation: phantom-linux-cursor 970ms step-end 3;
+  }
+
+  @keyframes phantom-linux-cursor {
+    50% { opacity: 0; }
+  }
+
+  #phantom-linux-terminal .linux-output {
+    color: var(--shell-muted);
+    overflow-wrap: anywhere;
+  }
+
+  #phantom-linux-terminal .linux-output[data-result] { color: var(--shell-mint); }
+
+  #phantom-linux-terminal .linux-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px 10px;
+    padding: 9px 12px;
+    border-top: 1px solid #47324b;
+    font-family: system-ui, sans-serif;
+  }
+
+  #phantom-linux-terminal .linux-status {
+    display: inline-flex;
+    gap: 7px;
+    align-items: center;
+    margin: 0;
+    color: #c4b5cc;
+    font-size: 12px;
+  }
+
+  #phantom-linux-terminal .linux-status::before {
+    content: '';
+    flex: 0 0 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+
+  #phantom-linux-terminal [data-state="on"] .linux-status { color: var(--shell-mint); }
+  #phantom-linux-terminal [data-state="busy"] .linux-status { color: #e9c58c; }
+
+  #phantom-linux-terminal .linux-switch {
+    min-height: 44px;
+    min-width: 115px;
+    padding: 7px 11px;
+    border: 1px solid #cdb0ef;
+    border-radius: 7px;
+    background: #d9bff7;
+    color: #23122c;
+    font: 600 12px/1.3 system-ui, sans-serif;
+  }
+
+  #phantom-linux-terminal [data-state="on"] .linux-switch,
+  #phantom-linux-terminal .linux-switch[aria-disabled="true"] {
+    border-color: #654d70;
+    background: #322036;
+    color: #ecd9f7;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    #phantom-linux-terminal .linux-window .linux-cursor { animation: none; }
+  }
+</style>
+
+<script>
+  (() => {
+    const root = document.getElementById('phantom-linux-terminal');
+    const terminal = root.querySelector('.linux-window');
+    const transcript = root.querySelector('.linux-transcript');
+    const button = root.querySelector('.linux-switch');
+    const status = root.querySelector('.linux-status');
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const settings = { characterDelay: 40 };
+    const visibleLines = Number(getComputedStyle(transcript).getPropertyValue('--shell-visible-lines'));
+    const wait = (milliseconds) => new Promise(resolve => window.setTimeout(resolve, milliseconds));
+    let prompt = transcript.firstElementChild;
+    const promptTemplate = prompt.cloneNode(true);
+
+    const commands = {
+      connect: {
+        command: 'phantom connect',
+        pending: 'Подключение…',
+        output: [
+          'Loading VPN profile...',
+          'Validating Xray config...',
+          'Starting Xray core...',
+          'Creating TUN interface...',
+          'Starting tunnel adapter...',
+          'Checking VPN route...',
+          '[ OK ] VPN connected',
+        ],
+        state: 'on',
+        status: 'VPN подключён',
+        nextAction: 'Отключить',
+      },
+      disconnect: {
+        command: 'phantom disconnect',
+        pending: 'Отключение…',
+        output: [
+          'Stopping VPN tunnel...',
+          'Stopping tunnel adapter...',
+          'Stopping Xray core...',
+          'Closing TUN interface...',
+          'Restoring default route...',
+          'Saving traffic counters...',
+          '[ OK ] VPN disconnected',
+        ],
+        state: 'off',
+        status: 'VPN отключён',
+        nextAction: 'Подключить',
+      },
+    };
+
+    function appendLine(line) {
+      transcript.append(line);
+      if (transcript.childElementCount > visibleLines) transcript.firstElementChild.remove();
+    }
+
+    button.addEventListener('click', async () => {
+      if (terminal.dataset.state === 'busy') return;
+
+      const run = terminal.dataset.state === 'on' ? commands.disconnect : commands.connect;
+      const input = prompt.querySelector('.linux-input');
+      const animate = !reducedMotion.matches;
+      const characterDelay = parseFloat(getComputedStyle(terminal).getPropertyValue('--shell-character-delay'));
+      terminal.dataset.state = 'busy';
+      button.setAttribute('aria-disabled', 'true');
+      button.textContent = 'Выполняется…';
+      status.textContent = run.pending;
+
+      if (animate) {
+        for (const character of run.command) {
+          input.textContent += character;
+          await wait(characterDelay);
+        }
+        await wait(120);
+      } else {
+        input.textContent = run.command;
+      }
+      prompt.classList.remove('linux-active-prompt');
+
+      for (const [index, text] of run.output.entries()) {
+        if (animate) await wait(index === 0 ? 0 : 245);
+        const output = document.createElement('div');
+        output.className = 'linux-output';
+        output.textContent = text;
+        output.toggleAttribute('data-result', index === run.output.length - 1);
+        appendLine(output);
+      }
+
+      prompt = promptTemplate.cloneNode(true);
+      appendLine(prompt);
+      terminal.dataset.state = run.state;
+      status.textContent = run.status;
+      button.textContent = run.nextAction;
+      button.removeAttribute('aria-disabled');
+    });
+
+    if (globalThis.Tweak) {
+      const tweak = new globalThis.Tweak({
+        container: terminal,
+        onChange: () => terminal.style.setProperty('--shell-character-delay', `${settings.characterDelay}ms`),
+      });
+      tweak.addSlider(settings, 'characterDelay', { label: 'Пауза между символами', min: 20, max: 80, step: 5, unit: 'мс' });
+    }
+  })();
+</script>

@@ -29,6 +29,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -69,6 +70,7 @@ data class Confirm(val title: String,val body: String,val action: suspend ()->Un
 
 @Composable
 fun PhantomRoot(app: PhantomApp,incoming: String?,consumeIncoming: ()->Unit,externalMessage: String,consumeMessage: ()->Unit,
+    openLocations: Boolean,consumeLocations: ()->Unit,
     onConnect: ()->Unit,onFile: ()->Unit,onQr: ()->Unit,onClipboard: ()->Unit,onExport: (String)->Unit) {
     val catalog by app.vault.state.collectAsStateWithLifecycle()
     val vpn by VpnRuntime.state.collectAsStateWithLifecycle()
@@ -98,22 +100,34 @@ fun PhantomRoot(app: PhantomApp,incoming: String?,consumeIncoming: ()->Unit,exte
         }
     }
     val prober = app.prober
-    val checking by prober.checking.collectAsStateWithLifecycle()
-    val servers = remember(catalog.subscriptions) { catalog.subscriptions.flatMap { it.servers } }
+    val progress by prober.progress.collectAsStateWithLifecycle()
+    val checking = progress?.pending.orEmpty()
+    val servers = remember(catalog.subscriptions) { catalog.servers().toList() }
+    val autoMessage = vpn.message.takeIf { catalog.autoSelect && it == NO_AUTO_SERVER_MESSAGE }
     fun checkPing(targets: List<Server>) {
+        if (prober.progress.value != null) return
         scope.launch {
             try { prober.test(targets) }
             catch (e: CancellationException) { throw e }
             catch (e: Exception) { snackbar.showSnackbar(safeError(e)) }
         }
     }
-    fun select(server: Server) {
-        if(server.issue.isNotBlank()) { scope.launch { snackbar.showSnackbar(server.issue) };return }
-        work("Выбор сервера") {
-            app.vault.update { it.copy(selected=server.id) }
-            if(vpn.phase!=Phase.OFF) PhantomVpnService.connect(app)
+    fun select(server: Server?) {
+        if (busy.isNotBlank()) return
+        if (server != null && server.issue.isNotBlank()) {
+            scope.launch { snackbar.showSnackbar(server.issue) }
+            return
         }
-        showServers=false
+        work("Выбор сервера") {
+            app.vault.update { it.selectServer(server?.id) }
+            withContext(Dispatchers.Main.immediate) {
+                showServers = false
+                when (VpnRuntime.state.value.phase) {
+                    Phase.STARTING, Phase.WAITING, Phase.TUNNEL, Phase.ONLINE -> PhantomVpnService.connect(app)
+                    else -> Unit
+                }
+            }
+        }
     }
     fun favorite(server: Server) { work("Сохранение") { app.vault.update { c->c.copy(subscriptions=c.subscriptions.map { s->s.copy(servers=s.servers.map { if(it.id==server.id) it.copy(favorite=!it.favorite) else it }) }) } } }
     fun editServer(server: Server?) {
@@ -134,10 +148,24 @@ fun PhantomRoot(app: PhantomApp,incoming: String?,consumeIncoming: ()->Unit,exte
             val c=app.vault.state.value
             withContext(Dispatchers.IO) {
                 if(c.flag("updateOnOpen")) app.subscriptions.refreshAll()
-                if(c.flag("pingOnOpen") && vpn.phase==Phase.OFF) prober.test(app.vault.state.value.subscriptions.flatMap { it.servers })
+                if(c.flag("pingOnOpen") && vpn.phase==Phase.OFF) prober.test(app.vault.state.value.servers().toList())
             }
-            if(c.flag("connectOnOpen") && vpn.phase==Phase.OFF && c.selectedServer()!=null) onConnect()
+            val current = app.vault.state.value
+            if (!openLocations && c.flag("connectOnOpen") && VpnRuntime.state.value.phase == Phase.OFF &&
+                (current.selectedServer() != null || current.autoSelect && current.servers().any { it.issue.isBlank() })
+            ) onConnect()
+        } catch (e: CancellationException) {
+            throw e
         } catch(e: Exception) { loadError=app.startupError ?: safeError(e);snackbar.showSnackbar(loadError!!) }
+    }
+    LaunchedEffect(openLocations, ready) {
+        if (openLocations && ready) {
+            route = "home"
+            query = ""
+            favorites = false
+            showServers = true
+            consumeLocations()
+        }
     }
     LaunchedEffect(incoming,ready) { if(ready && incoming!=null) {
         val text=incoming;consumeIncoming()
@@ -151,7 +179,7 @@ fun PhantomRoot(app: PhantomApp,incoming: String?,consumeIncoming: ()->Unit,exte
     val density=LocalDensity.current
     MaterialTheme(colorScheme=colors) {
         CompositionLocalProvider(LocalDensity provides Density(density.density,density.fontScale*(catalog.setting("textScale").toFloatOrNull() ?: 1f))) {
-            Scaffold(containerColor=Background,snackbarHost={ SnackbarHost(snackbar) },topBar={
+            Scaffold(containerColor=Background,snackbarHost={ if (!showServers) SnackbarHost(snackbar) },topBar={
                 if(route!="home") TopAppBar(title={ Text(screenTitle(route),fontWeight=FontWeight.SemiBold) },navigationIcon={ IconButton(onClick={ route="settings".takeIf { route!="settings" } ?: "home" }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack,"Назад") } },colors=TopAppBarDefaults.topAppBarColors(containerColor=Background))
             }) { padding->
                 Box(Modifier.fillMaxSize().padding(padding)) {
@@ -168,7 +196,7 @@ fun PhantomRoot(app: PhantomApp,incoming: String?,consumeIncoming: ()->Unit,exte
                                     }
                                 }
                             }
-                        },checking=checking,onPing={ checkPing(listOf(it)) },
+                        },checking=checking,progress=progress,autoMessage=autoMessage,onPing={ checkPing(listOf(it)) },
                             onPingAll={ checkPing(servers) },canPingAll=servers.any { it.issue.isBlank() },
                             onSubAction={ sub,action->when(action) {
                             "expand" -> work("Сохранение") { app.vault.update { c->c.copy(subscriptions=c.subscriptions.map { if(it.id==sub.id) it.copy(expanded=!it.expanded) else it }) } }
@@ -220,20 +248,19 @@ fun PhantomRoot(app: PhantomApp,incoming: String?,consumeIncoming: ()->Unit,exte
                 ActionRow(Icons.Rounded.Edit,"Добавить сервер вручную") { addMenu=false;editServer(null) }
                 Spacer(Modifier.height(24.dp))
             }
-            if(showServers) ModalBottomSheet(onDismissRequest={ showServers=false },containerColor=Panel) {
-                Column(Modifier.fillMaxHeight(.88f).padding(horizontal=20.dp)) {
-                    Text("Выберите маршрут",fontSize=25.sp,fontWeight=FontWeight.SemiBold)
-                    OutlinedTextField(query,{query=it},Modifier.fillMaxWidth().padding(vertical=16.dp),singleLine=true,label={Text("Поиск сервера")},leadingIcon={Icon(Icons.Rounded.Search,null)},shape=RoundedCornerShape(18.dp))
-                    Row(horizontalArrangement=Arrangement.spacedBy(8.dp),verticalAlignment=Alignment.CenterVertically) {
-                        FilterChip(favorites,{favorites=!favorites},label={Text("Избранное")},leadingIcon={Icon(Icons.Rounded.Star,null,Modifier.size(16.dp))})
-                        Spacer(Modifier.weight(1f))
-                        PingButton("Проверить все", checking.isEmpty() && servers.any { it.issue.isBlank() }) { checkPing(servers) }
+            if (showServers) ServerPicker(
+                catalog, servers, progress, query, { query = it }, favorites, { favorites = !favorites },
+                busy, autoMessage, snackbar, onDismiss = { showServers = false },
+                onRefresh = {
+                    work(REFRESH_SUBSCRIPTIONS) {
+                        app.subscriptions.refreshAll()
+                        val failed = app.vault.state.value.subscriptions.count { it.url.isNotBlank() && it.error.isNotBlank() }
+                        if (failed > 0) scope.launch { snackbar.showSnackbar("Не удалось обновить подписки ($failed)") }
                     }
-                    LazyColumn { items(visibleServers(servers,catalog,query,favorites),key={it.id}) { server->
-                        ServerRow(server,catalog.selected==server.id,server.id in checking,{select(server)},{favorite(server)},{editServer(server)})
-                    } }
-                }
-            }
+                },
+                onPing = { checkPing(servers) }, onAuto = { select(null) },
+                onSelect = ::select, onFavorite = ::favorite, onEdit = ::editServer,
+            )
             editor?.let { e->EditorDialog(e,{editor=null}) { name,text->work("Обработка конфигурации") { e.onSave(name,text) } } }
             confirm?.let { c->AlertDialog(onDismissRequest={confirm=null},title={Text(c.title)},text={Text(c.body)},confirmButton={TextButton(onClick={confirm=null;work("Выполнение") { c.action() }}) {Text("Подтвердить")}},dismissButton={TextButton(onClick={confirm=null}) {Text("Отмена")}}) }
             editSubscription?.let { sub->SubscriptionEditor(sub,{editSubscription=null}) { name,url,ua->work("Сохранение подписки") {
@@ -245,16 +272,17 @@ fun PhantomRoot(app: PhantomApp,incoming: String?,consumeIncoming: ()->Unit,exte
     }
 }
 
-fun visibleServers(servers: List<Server>,c: Catalog,query: String="",favorite: Boolean=false): List<Server> {
-    val list=servers.distinctBy { it.id }.filter { (!favorite || it.favorite) && it.name.contains(query,true) && it.name.contains(c.setting("filter"),true) }
-    return when(c.setting("sort")) { "latency"->list.sortedBy { it.latency?.takeIf { n->n>=0 } ?: Long.MAX_VALUE };"alphabet"->list.sortedBy { it.name.lowercase() };else->list }
+private fun visibleServers(servers: List<Server>,c: Catalog): List<Server> {
+    val list=servers.distinctBy { it.id }.filter { it.name.contains(c.setting("filter"),true) }
+    return when(c.setting("sort")) { "latency"->list.sortedWith(compareBy(nullsLast(naturalOrder<Long>()), Server::successfulLatency));"alphabet"->list.sortedBy { it.name.lowercase() };else->list }
 }
 
 @Composable
 internal fun Home(c: Catalog,vpn: VpnSnapshot,busy: String,visible: Boolean,onSettings: ()->Unit,onAdd: ()->Unit,onServers: ()->Unit,onPower: (VpnAction)->Unit,
-    checking: Set<String>,onPing: (Server)->Unit,onPingAll: ()->Unit,canPingAll: Boolean,
+    checking: Set<String>,progress: Prober.Progress?,autoMessage: String?,onPing: (Server)->Unit,onPingAll: ()->Unit,canPingAll: Boolean,
     onSubAction: (Subscription,String)->Unit,onSelect: (Server)->Unit,onFavorite: (Server)->Unit,onEditServer: (Server?)->Unit) {
     val context=LocalContext.current
+    val version = remember(context) { context.packageManager.getPackageInfo(context.packageName, 0).versionName.orEmpty() }
     val lifecycle=LocalLifecycleOwner.current.lifecycle.currentStateAsState()
     var interactive by remember { mutableStateOf(context.getSystemService(PowerManager::class.java).isInteractive) }
     DisposableEffect(context) {
@@ -292,13 +320,29 @@ internal fun Home(c: Catalog,vpn: VpnSnapshot,busy: String,visible: Boolean,onSe
                 }
             }
             item {
-                val selected = c.selectedServer()
+                val selected = if (c.autoSelect) c.server(vpn.serverId).takeIf { vpn.tunnel } else c.selectedServer()
+                val title = if (c.autoSelect) "Авто" else selected?.name ?: "Выбрать сервер"
+                val detail = when {
+                    c.autoSelect && vpn.tunnel -> vpn.serverName
+                    c.autoSelect && vpn.phase == Phase.STARTING && progress != null ->
+                        "Проверено ${progress.completed} из ${progress.total}"
+                    c.autoSelect -> "Сервер с наименьшим пингом"
+                    else -> selected?.summary() ?: "Добавьте подписку или конфигурацию"
+                }
                 SurfaceCard {
                     Row(Modifier.fillMaxWidth().clickable(onClick=onServers),verticalAlignment=Alignment.CenterVertically) {
                         Icon(Icons.Rounded.Public,null,tint=MaterialTheme.colorScheme.primary,modifier=Modifier.size(24.dp))
-                        Column(Modifier.padding(horizontal=14.dp).weight(1f)) { Text("ВЫБРАННЫЙ СЕРВЕР",fontSize=9.sp,letterSpacing=2.sp,color=Muted);Text(selected?.name ?: "Выбрать сервер",Modifier.padding(top=5.dp),maxLines=1,overflow=TextOverflow.Ellipsis,fontWeight=FontWeight.Medium);Text(selected?.summary() ?: "Добавьте подписку или конфигурацию",fontSize=10.sp,color=Muted,maxLines=1) }
+                        Column(Modifier.padding(horizontal=14.dp).weight(1f)) {
+                            Text("ВЫБРАННЫЙ СЕРВЕР",fontSize=9.sp,letterSpacing=2.sp,color=Muted)
+                            Text(title,Modifier.padding(top=5.dp),maxLines=1,overflow=TextOverflow.Ellipsis,fontWeight=FontWeight.Medium)
+                            Text(detail,fontSize=if (c.autoSelect && vpn.tunnel) 12.sp else 10.sp,color=Muted,
+                                maxLines=if (c.autoSelect && vpn.tunnel) 2 else 1,overflow=TextOverflow.Ellipsis)
+                        }
                         if (selected != null) PingResult(selected, selected.id in checking)
                         Icon(Icons.Rounded.ExpandMore,null,tint=Muted)
+                    }
+                    if (autoMessage != null) {
+                        Text(autoMessage,Modifier.padding(top=8.dp),fontSize=12.sp,color=MaterialTheme.colorScheme.error)
                     }
                     if (selected != null) Box(Modifier.align(Alignment.End).padding(top=4.dp)) {
                         PingButton("Проверить пинг", checking.isEmpty() && selected.issue.isBlank()) { onPing(selected) }
@@ -314,7 +358,7 @@ internal fun Home(c: Catalog,vpn: VpnSnapshot,busy: String,visible: Boolean,onSe
                 Column(Modifier.fillMaxWidth().padding(12.dp),horizontalAlignment=Alignment.CenterHorizontally) { Icon(Icons.Rounded.Hub,null,tint=MaterialTheme.colorScheme.primary,modifier=Modifier.size(34.dp));Text("Создайте свой маршрут",Modifier.padding(top=18.dp),fontSize=19.sp);Text("Импортируйте ссылку, QR-код или JSON.\nДанные останутся на вашем устройстве.",Modifier.padding(vertical=12.dp),fontSize=12.sp,color=Muted);Button(onClick=onAdd) {Text("Добавить подписку")} }
             } }
             items(c.subscriptions.sortedByDescending { it.pinned },key={it.id}) { sub->SubscriptionCard(sub,c,checking,onSubAction,onSelect,onFavorite,onEditServer) }
-            item { Text("XRAY-CORE 26.11.9  /  PHANTOM 1.0.2",Modifier.fillMaxWidth().padding(top=10.dp),fontFamily=FontFamily.Monospace,fontSize=9.sp,color=Muted.copy(alpha=.6f),letterSpacing=1.sp) }
+            item { Text("XRAY-CORE 26.11.9  /  PHANTOM $version",Modifier.fillMaxWidth().padding(top=10.dp),fontFamily=FontFamily.Monospace,fontSize=9.sp,color=Muted.copy(alpha=.6f),letterSpacing=1.sp) }
         }
     }
 }
@@ -346,7 +390,7 @@ internal fun Home(c: Catalog,vpn: VpnSnapshot,busy: String,visible: Boolean,onSe
             sub.metadata["announce"]?.let { Text(it,Modifier.padding(20.dp,0.dp,20.dp,12.dp),fontSize=11.sp,color=Muted,maxLines=3,overflow=TextOverflow.Ellipsis) }
             if(sub.error.isNotBlank()) Text(sub.error,Modifier.padding(16.dp),color=MaterialTheme.colorScheme.error,fontSize=12.sp)
             AnimatedVisibility(sub.expanded || !c.flag("collapsible"),enter=expandVertically(tween(if(c.flag("animations")) 250 else 0))+fadeIn(),exit=shrinkVertically(tween(if(c.flag("animations")) 200 else 0))+fadeOut()) {
-                Column(Modifier.padding(horizontal=12.dp)) { visibleServers(sub.servers,c).forEach { server->ServerRow(server,c.selected==server.id,server.id in checking,{onSelect(server)},{onFavorite(server)},{onEdit(server)}) };Spacer(Modifier.height(8.dp)) }
+                Column(Modifier.padding(horizontal=12.dp)) { visibleServers(sub.servers,c).forEach { server->ServerRow(server,!c.autoSelect && c.selected==server.id,server.id in checking,{onSelect(server)},{onFavorite(server)},{onEdit(server)}) };Spacer(Modifier.height(8.dp)) }
             }
         }
     }
@@ -368,20 +412,20 @@ private fun PingResult(server: Server, checking: Boolean) {
     if (checking) {
         CircularProgressIndicator(Modifier.size(16.dp).semantics { contentDescription = "Идёт проверка пинга" },color=accent,strokeWidth=2.dp)
     } else {
-        val delay = server.latency
+        val delay = server.successfulLatency
         val label = when {
-            delay == null -> "—"
-            delay >= 0 -> "$delay мс"
+            delay != null -> "$delay мс"
             server.latencyError == PROBE_TIMEOUT_LABEL -> PROBE_TIMEOUT_LABEL
-            else -> "Ошибка"
+            server.latencyError.isNotBlank() || server.latency != null || server.testedAt > 0 -> "Ошибка"
+            else -> "—"
         }
-        Text(label,fontSize=11.sp,color=if (delay != null && delay >= 0) accent else Muted,maxLines=1)
+        Text(label,fontSize=11.sp,color=if (delay != null) accent else Muted,maxLines=1)
     }
 }
 
 @Composable fun ServerRow(server: Server,selected: Boolean,checking: Boolean,onSelect: ()->Unit,onFavorite: ()->Unit,onEdit: ()->Unit) {
-    Row(Modifier.fillMaxWidth().padding(vertical=3.dp).background(if(selected) MaterialTheme.colorScheme.primary.copy(alpha=.11f) else Color.Transparent,RoundedCornerShape(16.dp)).clickable(onClick=onSelect).padding(start=12.dp,top=10.dp,bottom=10.dp),verticalAlignment=Alignment.CenterVertically) {
-        Icon(if(server.issue.isNotBlank()) Icons.Rounded.ErrorOutline else if(selected) Icons.Rounded.RadioButtonChecked else Icons.Rounded.RadioButtonUnchecked,null,tint=if(selected) MaterialTheme.colorScheme.primary else Muted,modifier=Modifier.size(19.dp))
+    Row(Modifier.fillMaxWidth().padding(vertical=3.dp).background(if(selected) MaterialTheme.colorScheme.primary.copy(alpha=.11f) else Color.Transparent,RoundedCornerShape(16.dp)).clickable(onClick=onSelect).semantics { this.selected = selected }.padding(start=12.dp,top=10.dp,bottom=10.dp),verticalAlignment=Alignment.CenterVertically) {
+        Icon(if(server.issue.isNotBlank()) Icons.Rounded.ErrorOutline else if(selected) Icons.Rounded.Check else Icons.Rounded.RadioButtonUnchecked,null,tint=if(selected) MaterialTheme.colorScheme.primary else Muted,modifier=Modifier.size(19.dp))
         Column(Modifier.weight(1f).padding(start=10.dp,end=4.dp)) { Text(server.name,fontSize=13.sp,maxLines=2,overflow=TextOverflow.Ellipsis);Text(server.issue.ifBlank { server.description().ifBlank { server.summary() } },fontSize=9.sp,color=if(server.issue.isBlank()) Muted else MaterialTheme.colorScheme.error,maxLines=2);if(!checking && server.latencyError.isNotBlank() && server.latencyError!=PROBE_TIMEOUT_LABEL) Text(server.latencyError,fontSize=9.sp,color=Muted,maxLines=2) }
         PingResult(server,checking)
         IconButton(onClick=onFavorite,modifier=Modifier.size(35.dp)) {Icon(if(server.favorite) Icons.Rounded.Star else Icons.Rounded.StarBorder,"Избранное",Modifier.size(17.dp),tint=if(server.favorite) MaterialTheme.colorScheme.primary else Muted)}

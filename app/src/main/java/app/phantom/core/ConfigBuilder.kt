@@ -3,6 +3,7 @@ package app.phantom.core
 import app.phantom.data.*
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.Locale
 
 object ConfigBuilder {
     const val TUN_PORT = 10990
@@ -19,16 +20,23 @@ object ConfigBuilder {
             .put("sniffing",JSONObject().put("enabled",true).put("destOverride",JSONArray(listOf("http","tls","quic"))).put("routeOnly",true))
 
     fun build(server: Server, catalog: Catalog, assetDir: String, probe: Boolean = false): String =
-        build(server, catalog, assetDir, probe, null, null)
+        build(server, catalog, assetDir, probe, null, null).toString()
 
-    internal fun buildTunnel(server: Server, catalog: Catalog, assetDir: String, fd: Int, control: XrayLoopback): String =
-        build(server, catalog, assetDir, false, fd, control)
+    internal data class TunnelConfig(val json: String, val protocolsByTag: Map<String, String>)
 
-    private fun build(server: Server, catalog: Catalog, assetDir: String, probe: Boolean, fd: Int?, control: XrayLoopback?): String {
+    internal fun buildTunnel(server: Server, catalog: Catalog, assetDir: String, fd: Int, control: XrayLoopback): TunnelConfig {
+        val config = build(server, catalog, assetDir, false, fd, control)
+        val protocols = config.getJSONArray("outbounds").remoteOutbounds().associate {
+            it.getString("tag") to it.getString("protocol").uppercase(Locale.ROOT)
+        }
+        return TunnelConfig(config.toString(), protocols)
+    }
+
+    private fun build(server: Server, catalog: Catalog, assetDir: String, probe: Boolean, fd: Int?, control: XrayLoopback?): JSONObject {
         require(server.issue.isBlank()) { server.issue }
         val c=JSONObject(server.config)
         val outs=c.optJSONArray("outbounds") ?: error("Нет outbounds")
-        val remotes=outs.objects().filter { it.optString("protocol") !in listOf("dns","freedom","direct","block","blackhole") }
+        val remotes=outs.remoteOutbounds()
         require(remotes.isNotEmpty()) { "В конфигурации нет удалённого прокси" }
         remotes.forEachIndexed { i,o -> if(o.optString("tag").isBlank()) o.put("tag","phantom-node-$i") }
         val providerJson=c.optBoolean("_phantomProviderJson")
@@ -131,6 +139,6 @@ object ConfigBuilder {
             outs.put(outbound("phantom-fragment","freedom",JSONObject().put("fragment",JSONObject().put("packets","tlshello").put("length","100-200").put("interval","10-20"))))
         }
         c.put("outbounds",outs)
-        return c.toString()
+        return c
     }
 }

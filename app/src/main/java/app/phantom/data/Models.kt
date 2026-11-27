@@ -9,12 +9,18 @@ fun id() = UUID.randomUUID().toString()
 fun hash(s: String) = MessageDigest.getInstance("SHA-256").digest(s.toByteArray()).joinToString("") { "%02x".format(it) }
 fun JSONArray.objects() = (0 until length()).map { getJSONObject(it) }
 fun JSONArray.strings() = (0 until length()).map { getString(it) }
+internal fun JSONArray.remoteOutbounds() = objects().filter {
+    it.optString("protocol") !in listOf("dns", "freedom", "direct", "block", "blackhole")
+}
 
 data class Server(
     val id: String = id(), val name: String, val config: String,
     val issue: String = "", val favorite: Boolean = false,
     val latency: Long? = null, val testedAt: Long = 0, val latencyError: String = "",
 ) {
+    val successfulLatency: Long?
+        get() = latency?.takeIf { it >= 0 && issue.isBlank() && latencyError.isBlank() }
+
     fun json() = JSONObject().put("id", id).put("name", name).put("config", config).put("issue", issue)
         .put("favorite", favorite).put("latency", latency ?: JSONObject.NULL).put("testedAt", testedAt).put("latencyError",latencyError)
         .put("latencyVersion", LATENCY_VERSION)
@@ -77,19 +83,31 @@ data class Catalog(
     val subscriptions: List<Subscription> = emptyList(), val selected: String = "",
     val settings: Map<String,String> = Defaults.values, val installationId: String = id(),
     val routeProfiles: Map<String,String> = mapOf("default" to "[]"), val totalTx: Long = 0, val totalRx: Long = 0,
-    val lastWorking: List<String> = emptyList(),
+    val lastWorking: List<String> = emptyList(), val autoSelect: Boolean = false,
 ) {
     fun setting(k: String) = settings[k] ?: Defaults.values[k].orEmpty()
     fun flag(k: String) = setting(k).toBoolean()
     fun number(k: String, fallback: Int) = setting(k).toIntOrNull() ?: fallback
-    fun selectedServer() = subscriptions.flatMap { it.servers }.firstOrNull { it.id == selected }
+    fun servers() = subscriptions.asSequence().flatMap { it.servers.asSequence() }
+    fun server(id: String) = servers().firstOrNull { it.id == id }
+    fun selectedServer() = server(selected)
+    internal fun selectServer(id: String?): Catalog {
+        if (id == null) return copy(autoSelect = true)
+        require(server(id)?.issue == "") { "Сервер больше недоступен" }
+        return copy(selected = id, autoSelect = false)
+    }
+    fun fastestServer(excluded: Set<String> = emptySet()): Server? = servers()
+        .filter { it.id !in excluded && it.successfulLatency != null }
+        .minByOrNull { it.successfulLatency!! }
+
     fun json() = JSONObject().put("subscriptions",JSONArray(subscriptions.map { it.json() })).put("selected",selected)
+        .put("autoSelect",autoSelect)
         .put("settings",JSONObject(settings)).put("installationId",installationId).put("routeProfiles",JSONObject(routeProfiles))
         .put("totalTx",totalTx).put("totalRx",totalRx).put("lastWorking",JSONArray(lastWorking))
     companion object {
         fun from(j: JSONObject) = Catalog(j.optJSONArray("subscriptions")?.objects()?.map(Subscription::from) ?: emptyList(),j.optString("selected"),
             Defaults.values + (j.optJSONObject("settings")?.let { s -> s.keys().asSequence().associateWith { s.getString(it) } } ?: emptyMap()),
             j.optString("installationId",id()),j.optJSONObject("routeProfiles")?.let { s -> s.keys().asSequence().associateWith { s.getString(it) } } ?: mapOf("default" to "[]"),
-            j.optLong("totalTx"),j.optLong("totalRx"),j.optJSONArray("lastWorking")?.strings().orEmpty())
+            j.optLong("totalTx"),j.optLong("totalRx"),j.optJSONArray("lastWorking")?.strings().orEmpty(),j.optBoolean("autoSelect"))
     }
 }
